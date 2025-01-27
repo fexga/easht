@@ -1,0 +1,16 @@
+# filepath: /home/felix/Documents/Studium TU/Masterarbeit/ms_project/hyperopt/train.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hyperopt-worker
+spec:
+  template:
+    spec:
+      containers:
+      - name: hyperopt-worker
+        image: hyperopt-worker:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: MONGO_URI
+          value: "mongo://mongo:27017/hyperopt/jobs"
+      restartPolicy: Never
