@@ -1,5 +1,0 @@
-# filepath: /home/felix/Documents/Studium TU/Masterarbeit/ms_project/hyperopt/.dockerignore
-__pycache__
-*.pyc
-.git
-.vscode
