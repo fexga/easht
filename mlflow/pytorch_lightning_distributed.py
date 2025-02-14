@@ -43,7 +43,8 @@ def objective(trial):
     lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
     optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
 
-    for epoch in range(EPOCHS):
+    for epoch in range(EPO
+    CHS):
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             optimizer.zero_grad()

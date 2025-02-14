@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.utils.data as data
+import torch.utils.data as dt
 import torchvision.transforms as transforms
 from torchvision.datasets import MNIST
 import ray
@@ -32,7 +32,7 @@ class Net(nn.Module):
 def train_mnist(config):
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
     train_dataset = MNIST(root="~/data", train=True, transform=transform, download=True)
-    train_loader = data.DataLoader(dataset=train_dataset, batch_size=BATCHSIZE, shuffle=True)
+    train_loader = dt.DataLoader(dataset=train_dataset, batch_size=BATCHSIZE, shuffle=True)
 
     model = Net(config)
     criterion = nn.CrossEntropyLoss()
@@ -46,34 +46,33 @@ def train_mnist(config):
             loss = criterion(output, target)
             loss.backward()
             optimizer.step()
+            
+        # Update the metrics reporting to match the scheduler's expected path
+        tune.report(metrics={"metrics/loss": loss.item()})
 
-        tune.report(loss=loss.item())
+search_space = {
+    "n_layers": tune.choice([1, 2, 3]),
+    "n_units_l0": tune.choice([32, 64, 128]),
+    "n_units_l1": tune.choice([32, 64, 128]),
+    "n_units_l2": tune.choice([32, 64, 128]),
+    "dropout": tune.uniform(0.2, 0.5),
+    "lr": tune.loguniform(1e-5, 1e-1),
+    "optimizer": tune.choice(["Adam", "RMSprop", "SGD"])
+}
 
-if __name__ == "__main__":
-    config = {
-        "n_layers": tune.choice([1, 2, 3]),
-        "n_units_l0": tune.choice([32, 64, 128]),
-        "n_units_l1": tune.choice([32, 64, 128]),
-        "n_units_l2": tune.choice([32, 64, 128]),
-        "dropout": tune.uniform(0.2, 0.5),
-        "lr": tune.loguniform(1e-5, 1e-1),
-        "optimizer": tune.choice(["Adam", "RMSprop", "SGD"])
-    }
+scheduler = ASHAScheduler(
+    metric="metrics/loss",  # Changed from "metrics/loss" to match the reported metric
+    mode="min",
+    max_t=10,
+    grace_period=1,
+    reduction_factor=2
+)
 
-    scheduler = ASHAScheduler(
-        metric="loss",
-        mode="min",
-        max_t=EPOCHS,
-        grace_period=1,
-        reduction_factor=2
-    )
-
-    analysis = tune.run(
-        train_mnist,
-        config=config,
-        num_samples=10,
-        scheduler=scheduler
-    )
-
-    print("Best hyperparameters found were: ", analysis.best_config)
+analysis = tune.run(
+    train_mnist,
+    resources_per_trial={"cpu": 1, "gpu": 0},
+    config=search_space,
+    num_samples=10,
+    scheduler=scheduler
+)
 
