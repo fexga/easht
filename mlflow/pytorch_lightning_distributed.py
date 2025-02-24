@@ -10,6 +10,12 @@ import optuna
 from optuna.trial import TrialState
 import mlflow
 import mlflow.pytorch
+from prometheus_flask_exporter import PrometheusMetrics
+from flask import Flask
+import requests
+
+app = Flask(__name__)
+metrics = PrometheusMetrics(app)
 
 mlflow.set_tracking_uri("http://mlflow:5000")
 mlflow.set_experiment("pytorch-lightning-distributed")
@@ -37,11 +43,20 @@ class Net(nn.Module):
         x = x.view(x.size(0), -1)
         return self.layers(x)
 
+def get_power_consumption():
+    query = 'kepler_container_joules_total'
+    prometheus_url = 'http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/api/v1/query'
+    response = requests.get(prometheus_url, params={'query': query})
+    result = response.json()['data']['result']
+    return float(result[0]['value'][1]) if result else 0.0
+
 def objective(trial):
     with mlflow.start_run():
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
         train_dataset = MNIST(root="~/data", train=True, transform=transform, download=True)
         train_loader = DataLoader(dataset=train_dataset, batch_size=BATCHSIZE, shuffle=True)
+
+        start_power = get_power_consumption()
 
         model = Net(trial)
         criterion = nn.CrossEntropyLoss()
@@ -55,9 +70,12 @@ def objective(trial):
         mlflow.log_param("n_layers", trial.params["n_layers"])
         mlflow.log_param("dropout", trial.params["dropout"])
 
+        mlflow.log_param("consumption", start_power)
+
         for epoch in range(EPOCHS):
             model.train()
             for batch_idx, (data, target) in enumerate(train_loader):
+
                 optimizer.zero_grad()
                 output = model(data)
                 loss = criterion(output, target)
@@ -66,6 +84,7 @@ def objective(trial):
 
             # Log metrics for each epoch
             mlflow.log_metric("loss", loss.item(), step=epoch)
+            mlflow.log_metric("consumption", get_power_consumption(), step=epoch)
 
         # Log the model
         mlflow.pytorch.log_model(model, "model")
@@ -92,3 +111,7 @@ if __name__ == "__main__":
     print("  Params: ")
     for key, value in trial.params.items():
         print("    {}: {}".format(key, value))
+
+if __name__ == "__main__":
+    # Run the Flask app to expose metrics
+    app.run(host="0.0.0.0", port=5000)
