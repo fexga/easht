@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir optuna psycopg2-binary mlflow \
     && pip install --no-cache-dir torch torchvision \
         --index-url https://download.pytorch.org/whl/cpu \
     && pip install pytorch-lightning \
+    && pip install lightning \
+    && pip install optuna-integration[mlflow] \
     && pip install prometheus-flask-exporter
 
 COPY pytorch_lightning_distributed.py .

@@ -1,13 +1,16 @@
 import os
+
+import lightning.pytorch as pl
+from lightning.pytorch import Callback
+import optuna
+from optuna.integration.mlflow import MLflowCallback
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.utils.data as data
-import torchvision.transforms as transforms
-from torchvision.datasets import MNIST
-from torch.utils.data import DataLoader
-import optuna
-from optuna.trial import TrialState
+import torch.nn.functional as F
+from torch.optim import Adam
+import torch.utils.data
+from torchvision import datasets
+from torchvision import transforms
 import mlflow
 import mlflow.pytorch
 from prometheus_flask_exporter import PrometheusMetrics
@@ -20,93 +23,132 @@ metrics = PrometheusMetrics(app)
 mlflow.set_tracking_uri("http://mlflow:5000")
 mlflow.set_experiment("pytorch-lightning-distributed")
 
+
+PERCENT_VALID_EXAMPLES = 0.1
 BATCHSIZE = 128
-EPOCHS = 5
+CLASSES = 10
+EPOCHS = 1
+DIR = os.getcwd()
+MODEL_DIR = os.path.join(DIR, "result")
 
-class Net(nn.Module):
+
+class MetricsCallback(Callback):
+    def __init__(self):
+        super().__init__()
+        self.metrics = []
+
+    def on_validation_end(self, trainer, pl_module):
+        self.metrics.append(trainer.callback_metrics)
+
+
+def create_model(trial):
+    n_layers = trial.suggest_int("n_layers", 1, 3)
+    dropout = trial.suggest_float("dropout", 0.2, 0.5)
+    input_dim = 28 * 28
+    layers = []
+
+    for i in range(n_layers):
+        output_dim = int(trial.suggest_float("n_units_l{}".format(i), 4, 128))
+        layers.append(nn.Linear(input_dim, output_dim))
+        layers.append(nn.ReLU())
+        layers.append(nn.Dropout(dropout))
+        input_dim = output_dim
+
+    layers.append(nn.Linear(input_dim, CLASSES))
+    layers.append(nn.LogSoftmax(dim=1))
+    model = nn.Sequential(*layers)
+
+    return model
+
+
+class LightningNet(pl.LightningModule):
     def __init__(self, trial):
-        super(Net, self).__init__()
-        layers = []
-        input_dim = 28 * 28
-        n_layers = trial.suggest_int("n_layers", 1, 3)
-        dropout = trial.suggest_float("dropout", 0.2, 0.5)
-        for i in range(n_layers):
-            output_dim = trial.suggest_int("n_units_l{}".format(i), 32, 128)
-            layers.append(nn.Linear(input_dim, output_dim))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(dropout))
-            input_dim = output_dim
-        layers.append(nn.Linear(input_dim, 10))
-        self.layers = nn.Sequential(*layers)
+        super().__init__()
+        self.model = create_model(trial)
+        self.validation_step_outputs = []
 
-    def forward(self, x):
-        x = x.view(x.size(0), -1)
-        return self.layers(x)
+    def forward(self, data):
+        return self.model(data.view(-1, 28 * 28))
 
-def get_power_consumption():
-    query = 'kepler_container_joules_total'
-    prometheus_url = 'http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/api/v1/query'
-    response = requests.get(prometheus_url, params={'query': query})
-    result = response.json()['data']['result']
-    return float(result[0]['value'][1]) if result else 0.0
+    def training_step(self, batch, batch_nb):
+        data, target = batch
+        output = self.forward(data)
+        return {"loss": F.nll_loss(output, target)}
+
+    def validation_step(self, batch, batch_nb):
+        data, target = batch
+        output = self.forward(data)
+        pred = output.argmax(dim=1, keepdim=True)
+        accuracy = pred.eq(target.view_as(pred)).float().mean().item()
+        self.validation_step_outputs.append(accuracy)
+        return {"batch_val_acc": accuracy}
+
+    def on_validation_epoch_end(self):
+        accs = self.validation_step_outputs
+        accuracy = sum(accs) / len(accs)
+        # Pass the accuracy to the `DictLogger` via the `'log'` key.
+        self.log("val_acc", accuracy)
+
+    def configure_optimizers(self):
+        return Adam(self.model.parameters())
+
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(
+            datasets.FashionMNIST(DIR, train=True, download=True, transform=transforms.ToTensor()),
+            batch_size=BATCHSIZE,
+            shuffle=True,
+        )
+
+    def val_dataloader(self):
+        return torch.utils.data.DataLoader(
+            datasets.FashionMNIST(
+                DIR, train=False, download=True, transform=transforms.ToTensor()
+            ),
+            batch_size=BATCHSIZE,
+            shuffle=False,
+        )
+
 
 def objective(trial):
     with mlflow.start_run():
-        transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-        train_dataset = MNIST(root="~/data", train=True, transform=transform, download=True)
-        train_loader = DataLoader(dataset=train_dataset, batch_size=BATCHSIZE, shuffle=True)
+        metrics_callback = MetricsCallback()
+        trainer = pl.Trainer(
+            logger=False,
+            limit_val_batches=PERCENT_VALID_EXAMPLES,
+            enable_checkpointing=False,
+            max_epochs=EPOCHS,
+            accelerator="cpu",
+            callbacks=[metrics_callback],
+        )
 
-        start_power = get_power_consumption()
+        model = LightningNet(trial)
+        trainer.fit(model)
 
-        model = Net(trial)
-        criterion = nn.CrossEntropyLoss()
-        optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
-        lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
-        optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
+        return metrics_callback.metrics[-1]["val_acc"]
 
-        # Log parameters
-        mlflow.log_param("optimizer", optimizer_name)
-        mlflow.log_param("learning_rate", lr)
-        mlflow.log_param("n_layers", trial.params["n_layers"])
-        mlflow.log_param("dropout", trial.params["dropout"])
-
-        mlflow.log_param("consumption", start_power)
-
-        for epoch in range(EPOCHS):
-            model.train()
-            for batch_idx, (data, target) in enumerate(train_loader):
-
-                optimizer.zero_grad()
-                output = model(data)
-                loss = criterion(output, target)
-                loss.backward()
-                optimizer.step()
-
-            # Log metrics for each epoch
-            mlflow.log_metric("loss", loss.item(), step=epoch)
-            mlflow.log_metric("consumption", get_power_consumption(), step=epoch)
-
-        # Log the model
-        mlflow.pytorch.log_model(model, "model")
-
-        return loss.item()
 
 if __name__ == "__main__":
-    study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=100, timeout=600)
+    study = optuna.load_study(
+        study_name="k8s_mlflow",
+        storage="postgresql://{}:{}@postgres:5432/{}".format(
+            os.environ["POSTGRES_USER"],
+            os.environ["POSTGRES_PASSWORD"],
+            os.environ["POSTGRES_DB"],
+        ),
+    )
+    study.optimize(
+        objective,
+        n_trials=1,
+        timeout=600,
+        callbacks=[MLflowCallback(tracking_uri="http://mlflow:5000/", metric_name="val_accuracy")],
+    )
 
-    pruned_trials = [t for t in study.trials if t.state == TrialState.PRUNED]
-    complete_trials = [t for t in study.trials if t.state == TrialState.COMPLETE]
-
-    print("Study statistics: ")
-    print("  Number of finished trials: ", len(study.trials))
-    print("  Number of pruned trials: ", len(pruned_trials))
-    print("  Number of complete trials: ", len(complete_trials))
+    print("Number of finished trials: {}".format(len(study.trials)))
 
     print("Best trial:")
     trial = study.best_trial
 
-    print("  Value: ", trial.value)
+    print("  Value: {}".format(trial.value))
 
     print("  Params: ")
     for key, value in trial.params.items():
