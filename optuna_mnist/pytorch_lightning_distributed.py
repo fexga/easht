@@ -3,7 +3,6 @@ import os
 import lightning.pytorch as pl
 from lightning.pytorch import Callback
 import optuna
-from optuna.integration.mlflow import MLflowCallback
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,16 +10,12 @@ from torch.optim import Adam
 import torch.utils.data
 from torchvision import datasets
 from torchvision import transforms
-import mlflow
-import mlflow.pytorch
 from prometheus_flask_exporter import PrometheusMetrics
 from flask import Flask
 import requests
 
 app = Flask(__name__)
 metrics = PrometheusMetrics(app)
-
-mlflow.set_tracking_uri("http://mlflow:5000")
 
 
 PERCENT_VALID_EXAMPLES = 0.1
@@ -128,7 +123,7 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.load_study(
-        study_name="k8s_mlflow",
+        study_name="optuna_mnist",
         storage="postgresql://{}:{}@postgres:5432/{}".format(
             os.environ["POSTGRES_USER"],
             os.environ["POSTGRES_PASSWORD"],
@@ -139,7 +134,6 @@ if __name__ == "__main__":
         objective,
         n_trials=1,
         timeout=600,
-        callbacks=[MLflowCallback(tracking_uri="http://mlflow:5000/", metric_name="val_accuracy")],
     )
 
     print("Number of finished trials: {}".format(len(study.trials)))

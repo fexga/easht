@@ -33,7 +33,7 @@ def deploy_postgres():
     #    else:
     #        print("Warning: Encountered a NoneType object in the manifest. Skipping.")
 
-def deploy_experiment():
+def deploy_and_setup():
     config.load_kube_config()
     k8s_client = client.ApiClient()
 
@@ -45,16 +45,24 @@ def deploy_experiment():
     #print("\nDeploying experiment to cluster\n")
     #command = ['kubectl', 'apply', '-f', 'k8s-manifest.yaml']
     #subprocess.run(command, check=True)
-    utils.create_from_yaml(k8s_client, "k8s-manifestd.yaml")
+    #utils.create_from_yaml(k8s_client, "postgres-manifest.yaml")
+
+    utils.create_from_yaml(k8s_client, "study-creator.yaml")
     #for m in manifest:
     #    if m is not None:
     #        utils.create_from_dict(k8s_client, m)
     #    else:
     #        print("Warning: Encountered a NoneType object in the manifest. Skipping.")
 
+def trails():
+    config.load_kube_config()
+    k8s_client = client.ApiClient()
+
+    utils.create_from_yaml(k8s_client, "worker.yaml")
+
 def main():
     #if is_minikube:
-    subprocess.run(["eval", "$(minikube docker-env -u)"], shell=True, check=True)
+    subprocess.run(["eval", "$(minikube -p docker-env)"], shell=True, check=True)
 
     # Build Docker Image
     build_docker_image()
@@ -62,12 +70,13 @@ def main():
     # Push Docker image to proper container registry if using cloud provider
     #if not is_minikube:
         #push_docker_image(image_name)
-
-    # Deploy PostgreSQL
     deploy_postgres()
 
+    # Deploy PostgreSQL
+    deploy_and_setup()
+
     # Deploy the experiment
-    deploy_experiment()
+    trails()
 
 if __name__ == "__main__":
     #if len(sys.argv) != 3:

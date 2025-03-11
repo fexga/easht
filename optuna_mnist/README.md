@@ -35,3 +35,7 @@ $ minikube service mlflow --url
 ```bash
 $ kubectl logs worker-<pod id>
 ```
+
+- python optuna_mnist_experiment.py
+
+- python optuna_mnist_experiment.py True optuna-kubernetes-mlflow3:example
