@@ -10,13 +10,6 @@ from torch.optim import Adam
 import torch.utils.data
 from torchvision import datasets
 from torchvision import transforms
-from prometheus_flask_exporter import PrometheusMetrics
-from flask import Flask
-import requests
-
-app = Flask(__name__)
-metrics = PrometheusMetrics(app)
-
 
 PERCENT_VALID_EXAMPLES = 0.1
 BATCHSIZE = 128
@@ -123,7 +116,7 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.load_study(
-        study_name="optuna_mnist",
+        study_name="k8s_mlflow",
         storage="postgresql://{}:{}@postgres:5432/{}".format(
             os.environ["POSTGRES_USER"],
             os.environ["POSTGRES_PASSWORD"],
@@ -147,6 +140,3 @@ if __name__ == "__main__":
     for key, value in trial.params.items():
         print("    {}: {}".format(key, value))
 
-if __name__ == "__main__":
-    # Run the Flask app to expose metrics
-    app.run(host="0.0.0.0", port=5000)
