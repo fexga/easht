@@ -95,7 +95,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
         # Get the job to determine expected completions
         job = batch_v1.read_namespaced_job(name="worker", namespace="default")
-        expected_completions = job.spec.completions or 1
+        expected_completions = job.spec.completions or 5
         print(f"Job expects {expected_completions} completions")
 
         # Set up monitoring
@@ -133,12 +133,6 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
                 if int(elapsed) % 15 == 0:
                     remaining_pods = expected_completions - len(completed_pods)
                     print(f"Waiting: {len(completed_pods)}/{expected_completions} pods completed, {remaining_pods} remaining ({elapsed:.0f}s elapsed)")
-
-                # Check timeout
-                if elapsed > max_wait_time:
-                    print(f"Reached maximum wait time of {max_wait_time/60:.1f} minutes")
-                    w.stop()
-                    break
 
         except Exception as e:
             print(f"Error watching pods: {e}")
