@@ -172,6 +172,8 @@ def main():
         ob = OptunaBenchmark()
         runner = BenchmarkRunner(benchmark_cls=ob)
         runner.run()
+
+        ob.save_metrics("optuna_mnist_resource_metrics.csv")
     
     
     finally:
