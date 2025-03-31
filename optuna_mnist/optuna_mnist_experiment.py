@@ -36,6 +36,68 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
     def __init__(self):
         KeplerMetrics.__init__(self)  # Initialize the KeplerMetrics class
 
+    def _wait_for_pods_ready(self, label_selector, target_phase, timeout=300):
+        """
+        Wait for pods matching the label selector to reach the target phase.
+
+        Args:
+            label_selector (str): Kubernetes label selector
+            target_phase (str): Target pod phase ('Running', 'Succeeded', etc)
+            timeout (int): Maximum time to wait in seconds
+        """
+        config.load_kube_config()
+        core_v1 = client.CoreV1Api()
+
+        start_time = time.time()
+
+        # Keep track of pods we've seen reach the target state
+        completed_pods = set()
+
+        w = watch.Watch()
+        try:
+            for event in w.stream(
+                core_v1.list_namespaced_pod,
+                namespace="default",
+                label_selector=label_selector,
+                timeout_seconds=timeout
+            ):
+                pod = event['object']
+                pod_name = pod.metadata.name
+                current_phase = pod.status.phase
+
+                if current_phase == target_phase and pod_name not in completed_pods:
+                    completed_pods.add(pod_name)
+                    print(f"Pod {pod_name} reached state: {target_phase}")
+
+                # Get total count of pods with this selector
+                pod_list = core_v1.list_namespaced_pod(
+                    namespace="default", 
+                    label_selector=label_selector
+                )
+                total_pods = len(pod_list.items)
+
+                # If all pods are ready, we're done
+                if len(completed_pods) == total_pods and total_pods > 0:
+                    print(f"All {total_pods} pods with selector '{label_selector}' are in {target_phase} state!")
+                    w.stop()
+                    return
+
+                # Status update every 10 seconds
+                elapsed = time.time() - start_time
+                if int(elapsed) % 10 == 0:
+                    print(f"Waiting: {len(completed_pods)}/{total_pods} pods in {target_phase} state ({elapsed:.0f}s elapsed)")
+
+                # Check for timeout
+                if elapsed > timeout:
+                    print(f"Timeout waiting for pods with selector '{label_selector}' to reach {target_phase} state")
+                    w.stop()
+                    return
+
+        except Exception as e:
+            print(f"Error watching pods: {e}")
+        finally:
+            w.stop()
+
     @KeplerMetrics.measure_power
     def deploy(self) -> None:
         config.load_kube_config()
@@ -43,6 +105,11 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
         manifest_path = os.path.join(os.path.dirname(__file__), 'postgres-manifest.yaml')
         utils.create_from_yaml(k8s_client, manifest_path)
+
+        # Wait for PostgreSQL pod to be running
+        print("Waiting for PostgreSQL pods to be ready...")
+        self._wait_for_pods_ready("app=postgres", "Running")
+        print("PostgreSQL deployment complete!")
 
         # Load the PostgreSQL manifest
         #with open("postgres-manifest.yaml") as f:
@@ -60,6 +127,8 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
     def setup(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
+
+        # Wait for study-creator job to complete
 
         # Load the experiment manifest
         #with open("k8s-manifest.yaml") as f:
@@ -79,6 +148,9 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         #        utils.create_from_dict(k8s_client, m)
         #    else:
         #        print("Warning: Encountered a NoneType object in the manifest. Skipping.")
+        print("Waiting for study-creator job to complete...")
+        self._wait_for_pods_ready("job-name=study-creator", "Succeeded")
+        print("Study setup complete!")
 
     @KeplerMetrics.measure_power
     def run(self):
@@ -95,7 +167,8 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
         # Get the job to determine expected completions
         job = batch_v1.read_namespaced_job(name="worker", namespace="default")
-        expected_completions = job.spec.completions or 5
+        #expected_completions = job.spec.completions or 5
+        expected_completions = 5
         print(f"Job expects {expected_completions} completions")
 
         # Set up monitoring
