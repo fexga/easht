@@ -2,6 +2,7 @@ import time
 import functools
 import pandas as pd
 import requests
+import json
 
 class KeplerMetrics:
     def __init__(self, prometheus_url="http://localhost:9090/api/v1/query"):
@@ -79,25 +80,39 @@ class KeplerMetrics:
         return wrapper
     
     def _get_current_energy(self):
-        """Query Kepler for the current total energy consumption"""
-        try:
-            query = 'sum(kepler_container_joules_total{container_namespace="default"})'
-            response = requests.get(self.prometheus_url, params={'query': query})
-            result = response.json()['data']['result']
-            
-            if result and len(result) > 0:
-                return float(result[0]['value'][1])
-            else:
-                print("No energy data available from Kepler")
-                return None
-        except Exception as e:
-            print(f"Error querying Prometheus: {e}")
-            return None
+        
+        query = 'sum(kepler_container_joules_total{container_namespace="default"})'
+        response = requests.get(self.prometheus_url, params={'query': query})
+        result = response.json()
+
+        result = result['data']['result']
+
+        first_result = result[0]
+
+        value_list = first_result['value']
+
+        # Access the second element of the 'value' list
+        second_value = value_list[1]
+
+        return second_value
+
+
+        
+
+
+
+        '''
+        for result in results:
+            pod_name = result['metric']['pod']
+            metric_value = float(result['value'][1])
+            print(f"Pod: {pod_name}, Power Consumption (Watts): {metric_value}")
+        '''
     
     def _get_cpu_energy(self):
         """Query Kepler for the current CPU energy consumption"""
         try:
-            query = 'sum(kepler_container_package_joules_total{container_namespace="default"})'
+            query = 'kepler_container_package_joules_total{container_namespace="default"}'
+
             response = requests.get(self.prometheus_url, params={'query': query})
             result = response.json()['data']['result']
             
@@ -129,10 +144,62 @@ class KeplerMetrics:
     def save_metrics(self, filename="kepler_power_metrics.csv"):
         """Save the collected metrics to a CSV file"""
         if self.metrics:
-            df = pd.DataFrame.from_dict(self.metrics, orient='index')
+            # Create a deep copy to avoid modifying the original metrics
+            metrics_with_kwh = {}
+
+            url = "https://api.electricitymap.org/v3/carbon-intensity/latest"
+            headers = {
+                "auth-token": "dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph"
+            }
+            params = {
+                "zone": "AE"
+            }
+
+            response = requests.get(url, headers=headers, params=params)
+
+            data = response.json()
+            carbon_intensity = data.get("carbonIntensity")
+
+            for step_name, step_metrics in self.metrics.items():
+                metrics_with_kwh[step_name] = step_metrics.copy()
+
+                # Add kWh conversions for energy metrics
+                if 'total_energy_joules' in step_metrics:
+                    total_kwh = self.joules_to_kwh(
+                        step_metrics['total_energy_joules']
+                    )
+
+                    metrics_with_kwh[step_name]['total_energy_kwh'] = total_kwh
+
+                    metrics_with_kwh[step_name]['total_energy_cf'] =  total_kwh * carbon_intensity
+
+                if 'cpu_energy_joules' in step_metrics:
+                    cpu_kwh = self.joules_to_kwh(
+                        step_metrics['cpu_energy_joules']
+                    )
+
+                    metrics_with_kwh[step_name]['cpu_energy_kwh'] = cpu_kwh
+
+                    metrics_with_kwh[step_name]['cpu_energy_cf'] =  cpu_kwh * carbon_intensity
+
+                if 'dram_energy_joules' in step_metrics:
+                    dram_kwh = self.joules_to_kwh(
+                        step_metrics['dram_energy_joules']
+                    ) 
+
+                    metrics_with_kwh[step_name]['dram_energy_kwh'] = dram_kwh
+
+                    metrics_with_kwh[step_name]['dram_energy_cf'] = dram_kwh * carbon_intensity
+
+            df = pd.DataFrame.from_dict(metrics_with_kwh, orient='index')
             # Add the step name as a column
             df['step'] = df.index
             df.to_csv(filename, index=False)
             print(f"Metrics (including CPU and DRAM) saved to {filename}")
         else:
             print("No metrics to save")
+    
+    def joules_to_kwh(self, joules):
+        """Convert energy from joules to kilowatt-hours"""
+        # 1 kWh = 3,600,000 joules
+        return joules / 3_600_000

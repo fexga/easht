@@ -173,7 +173,6 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
         # Set up monitoring
         completed_pods = set()
-        max_wait_time = 900  # 15 minutes maximum wait time
         start_time = time.time()
 
         # Create a watch for pod status changes
@@ -184,8 +183,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
             for event in w.stream(
                 core_v1.list_namespaced_pod,
                 namespace="default",
-                label_selector="job-name=worker",
-                timeout_seconds=max_wait_time
+                label_selector="job-name=worker"
             ):
                 pod = event['object']
                 pod_name = pod.metadata.name
@@ -200,12 +198,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
                         print("All worker pods have completed successfully!")
                         w.stop()
                         break
-                    
-                # Status update every 15 seconds
-                elapsed = time.time() - start_time
-                if int(elapsed) % 15 == 0:
-                    remaining_pods = expected_completions - len(completed_pods)
-                    print(f"Waiting: {len(completed_pods)}/{expected_completions} pods completed, {remaining_pods} remaining ({elapsed:.0f}s elapsed)")
+                
 
         except Exception as e:
             print(f"Error watching pods: {e}")

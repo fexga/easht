@@ -1,4 +1,4 @@
-duration_seconds,total_energy_joules,avg_power_watts,cpu_energy_joules,avg_cpu_power_watts,dram_energy_joules,avg_dram_power_watts,step
-1.125154972076416,0.0,0.0,0.0,0.0,0.0,0.0,deploy
-4.976060628890991,0.0,0.0,0.0,0.0,0.0,0.0,setup
-726.9576661586761,133286.56199999998,183.3484509549239,1520.646,2.091794434241625,0.0,0.0,run
+duration_seconds,step
+19.007036447525024,deploy
+3.014289140701294,setup
+779.1678531169891,run
