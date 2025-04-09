@@ -1,0 +1,10 @@
+serviceMonitor:
+  enabled: true
+  labels:
+    release: prometheus
+
+# Configure Kepler metrics collection frequency
+exporter:
+  arguments:
+    - "--metric-interval=1s"
+    - "--expose-metrics-period=1s"

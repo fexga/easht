@@ -1,0 +1,19 @@
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 5s
+    scrapeTimeout: 4s
+    evaluationInterval: 10s
+    
+    # Specific scrape config for Kepler
+    additionalScrapeConfigs:
+      - job_name: kepler-scrape
+        scrape_interval: 1s
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - kepler
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: kepler
+            action: keep

@@ -81,46 +81,54 @@ class KeplerMetrics:
     
     def _get_current_energy(self):
         
-        query = 'sum(kepler_container_joules_total{container_namespace="default"})'
-        response = requests.get(self.prometheus_url, params={'query': query})
-        result = response.json()
+        try:
+            query = 'sum(kepler_container_joules_total{container_namespace="default"})'
+            response = requests.get(self.prometheus_url, params={'query': query})
+            result = response.json()
+            print(result)
 
-        result = result['data']['result']
+            result = result['data']['result']
+            print(result)
 
-        first_result = result[0]
+            first_result = result[0]
+            print(first_result)
 
-        value_list = first_result['value']
+            value_list = first_result['value']
+            print(value_list)
 
-        # Access the second element of the 'value' list
-        second_value = value_list[1]
+            # Access the second element of the 'value' list
+            second_value = value_list[1]
+            print(second_value)
 
-        return second_value
+            return float(second_value)
 
+        except Exception as e:
+            print(f"Error querying Prometheus for CPU energy: {e}")
+            return None
 
-        
-
-
-
-        '''
-        for result in results:
-            pod_name = result['metric']['pod']
-            metric_value = float(result['value'][1])
-            print(f"Pod: {pod_name}, Power Consumption (Watts): {metric_value}")
-        '''
     
     def _get_cpu_energy(self):
         """Query Kepler for the current CPU energy consumption"""
         try:
-            query = 'kepler_container_package_joules_total{container_namespace="default"}'
+            query = 'sum(kepler_container_core_joules_total{container_namespace="default"})'
 
             response = requests.get(self.prometheus_url, params={'query': query})
-            result = response.json()['data']['result']
-            
-            if result and len(result) > 0:
-                return float(result[0]['value'][1])
-            else:
-                print("No CPU energy data available from Kepler")
-                return None
+            result = response.json()
+            print(result)
+
+            result = result['data']['result']
+
+            first_result = result[0]
+
+            value_list = first_result['value']
+
+            # Access the second element of the 'value' list
+            second_value = value_list[1]
+
+            return float(second_value)
+
+
+
         except Exception as e:
             print(f"Error querying Prometheus for CPU energy: {e}")
             return None
@@ -129,14 +137,23 @@ class KeplerMetrics:
         """Query Kepler for the current DRAM energy consumption"""
         try:
             query = 'sum(kepler_container_dram_joules_total{container_namespace="default"})'
+
             response = requests.get(self.prometheus_url, params={'query': query})
-            result = response.json()['data']['result']
-            
-            if result and len(result) > 0:
-                return float(result[0]['value'][1])
-            else:
-                print("No DRAM energy data available from Kepler")
-                return None
+            result = response.json()
+            print(result)
+
+            result = result['data']['result']
+
+            first_result = result[0]
+
+            value_list = first_result['value']
+
+            # Access the second element of the 'value' list
+            second_value = value_list[1]
+
+            return float(second_value)
+
+
         except Exception as e:
             print(f"Error querying Prometheus for DRAM energy: {e}")
             return None
