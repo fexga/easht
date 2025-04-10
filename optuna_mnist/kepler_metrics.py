@@ -48,6 +48,27 @@ class KeplerMetrics:
                 })
                 print(f"Total energy for {step_name}: {energy_consumed:.2f} joules, "
                       f"Average power: {avg_power:.2f} watts")
+            elif end_total_energy is not None and start_total_energy is None:
+                start_total_energy = 0
+                energy_consumed = end_total_energy - start_total_energy
+                avg_power = energy_consumed / duration if duration > 0 else 0
+                self.metrics[step_name].update({
+                    'total_energy_joules': energy_consumed,
+                    'avg_power_watts': avg_power
+                })
+                print(f"Total energy for {step_name}: {energy_consumed:.2f} joules, "
+                      f"Average power: {avg_power:.2f} watts")
+            elif end_total_energy is None and start_total_energy is None:
+                start_total_energy = 0
+                end_total_energy = 0
+                energy_consumed = end_total_energy - start_total_energy
+                avg_power = energy_consumed / duration if duration > 0 else 0
+                self.metrics[step_name].update({
+                    'total_energy_joules': energy_consumed,
+                    'avg_power_watts': avg_power
+                })
+                print(f"Total energy for {step_name}: {energy_consumed:.2f} joules, "
+                      f"Average power: {avg_power:.2f} watts")
             else:
                 print(f"Could not measure total energy for {step_name}")
             
@@ -60,11 +81,49 @@ class KeplerMetrics:
                     'avg_cpu_power_watts': avg_cpu_power
                 })
                 print(f"CPU energy for {step_name}: {cpu_energy:.2f} joules")
+            elif end_cpu_energy is not None and start_cpu_energy is None:
+                start_cpu_energy = 0
+                cpu_energy = end_cpu_energy - start_cpu_energy
+                avg_cpu_power = cpu_energy / duration if duration > 0 else 0
+                self.metrics[step_name].update({
+                    'cpu_energy_joules': cpu_energy,
+                    'avg_cpu_power_watts': avg_cpu_power
+                })
+                print(f"CPU energy for {step_name}: {cpu_energy:.2f} joules")
+            elif end_cpu_energy is None and start_cpu_energy is None:
+                start_cpu_energy = 0
+                end_cpu_energy = 0
+                cpu_energy = end_cpu_energy - start_cpu_energy
+                avg_cpu_power = cpu_energy / duration if duration > 0 else 0
+                self.metrics[step_name].update({
+                    'cpu_energy_joules': cpu_energy,
+                    'avg_cpu_power_watts': avg_cpu_power
+                })
+                print(f"CPU energy for {step_name}: {cpu_energy:.2f} joules")
             else:
                 print(f"Could not measure CPU energy for {step_name}")
             
             # Calculate and store DRAM energy
             if end_dram_energy is not None and start_dram_energy is not None:
+                dram_energy = end_dram_energy - start_dram_energy
+                avg_dram_power = dram_energy / duration if duration > 0 else 0
+                self.metrics[step_name].update({
+                    'dram_energy_joules': dram_energy,
+                    'avg_dram_power_watts': avg_dram_power
+                })
+                print(f"DRAM energy for {step_name}: {dram_energy:.2f} joules")
+            elif end_dram_energy is not None and start_dram_energy is None:
+                start_dram_energy = 0
+                dram_energy = end_dram_energy - start_dram_energy
+                avg_dram_power = dram_energy / duration if duration > 0 else 0
+                self.metrics[step_name].update({
+                    'dram_energy_joules': dram_energy,
+                    'avg_dram_power_watts': avg_dram_power
+                })
+                print(f"DRAM energy for {step_name}: {dram_energy:.2f} joules")
+            elif end_dram_energy is None and start_dram_energy is None:
+                start_dram_energy = 0
+                end_dram_energy = 0
                 dram_energy = end_dram_energy - start_dram_energy
                 avg_dram_power = dram_energy / duration if duration > 0 else 0
                 self.metrics[step_name].update({
@@ -164,6 +223,18 @@ class KeplerMetrics:
             # Create a deep copy to avoid modifying the original metrics
             metrics_with_kwh = {}
 
+            total_process_joules = 0
+            total_cpu_joules = 0
+            total_dram_joules = 0
+
+            total_process_kwh = 0
+            total_cpu_kwh = 0
+            total_dram_kwh = 0
+
+            total_process_cf = 0
+
+            total_process_time = 0
+
             url = "https://api.electricitymap.org/v3/carbon-intensity/latest"
             headers = {
                 "auth-token": "dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph"
@@ -190,6 +261,10 @@ class KeplerMetrics:
 
                     metrics_with_kwh[step_name]['total_energy_cf'] =  total_kwh * carbon_intensity
 
+                    total_process_joules = total_process_joules + step_metrics['total_energy_joules']
+                    total_process_kwh = total_process_kwh + total_kwh
+                    total_process_cf = total_process_cf + metrics_with_kwh[step_name]['total_energy_cf']
+
                 if 'cpu_energy_joules' in step_metrics:
                     cpu_kwh = self.joules_to_kwh(
                         step_metrics['cpu_energy_joules']
@@ -199,6 +274,9 @@ class KeplerMetrics:
 
                     metrics_with_kwh[step_name]['cpu_energy_cf'] =  cpu_kwh * carbon_intensity
 
+                    total_cpu_joules = total_cpu_joules + step_metrics['cpu_energy_joules']
+                    total_cpu_kwh = total_cpu_kwh + cpu_kwh
+
                 if 'dram_energy_joules' in step_metrics:
                     dram_kwh = self.joules_to_kwh(
                         step_metrics['dram_energy_joules']
@@ -207,6 +285,25 @@ class KeplerMetrics:
                     metrics_with_kwh[step_name]['dram_energy_kwh'] = dram_kwh
 
                     metrics_with_kwh[step_name]['dram_energy_cf'] = dram_kwh * carbon_intensity
+
+                    total_dram_joules = total_dram_joules + step_metrics['dram_energy_joules']
+                    total_dram_kwh = total_dram_kwh + dram_kwh
+                
+                total_process_time = total_process_time + step_metrics['duration_seconds']
+            
+            metrics_with_kwh["total"]['total_energy_joules'] = total_process_joules
+            metrics_with_kwh["total"]["total_energy_kwh"] = total_process_kwh
+
+            metrics_with_kwh["total"]['cpu_energy_joules'] = total_cpu_joules
+            metrics_with_kwh["total"]["cpu_energy_kwh"] = total_cpu_kwh
+
+            metrics_with_kwh["total"]['dram_energy_joules'] = total_dram_joules
+            metrics_with_kwh["total"]["dram_energy_kwh"] = total_dram_kwh
+
+            metrics_with_kwh["total"]['total_energy_cf'] = total_process_cf
+
+            metrics_with_kwh["total"]['duration_seconds'] = total_process_time
+
 
             df = pd.DataFrame.from_dict(metrics_with_kwh, orient='index')
             # Add the step name as a column
