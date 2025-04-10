@@ -239,6 +239,8 @@ def main():
         runner = BenchmarkRunner(benchmark_cls=ob)
         runner.run()
 
+        ob.calculate_energy_metrics()
+
         ob.save_metrics("optuna_mnist_resource_metrics.csv")
     
     

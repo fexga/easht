@@ -1,11 +1,15 @@
-server: 
-  global:
-    ## How frequently to scrape targets by default
-    ##
-    scrape_interval: 3s
-    ## How long until a scrape request times out
-    ##
-    scrape_timeout: 10s
-    ## How frequently to evaluate rules
-    ##
-    evaluation_interval: 3s
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 3s
+    scrapeTimeout: 3s
+    evaluationInterval: 5s
+    
+    # Monitor settings
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    
+    # Additional settings to ensure they're applied
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    ruleNamespaceSelector: {}
