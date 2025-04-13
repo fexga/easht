@@ -8,7 +8,7 @@ import sys
 from kepler_metrics import KeplerMetrics
 import time
 
-from benchmark_template.experiment_runner import BenchmarkRunner, Benchmark
+from benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, BenchmarkComponent
 
 def build_docker_imageold():
     client = docker.from_env()
@@ -30,150 +30,78 @@ def push_docker_image(image_name):
     print(f"Pushing Docker Image {image_name}\n")
     client.images.push(image_name)
 
-
-class OptunaBenchmark(Benchmark, KeplerMetrics):
-
+class PostgresComponent(BenchmarkComponent):
     def __init__(self):
-        KeplerMetrics.__init__(self)  # Initialize the KeplerMetrics class
-
-    def _wait_for_pods_ready(self, label_selector, target_phase):
-        """
-        Wait for pods matching the label selector to reach the target phase.
-
-        Args:
-            label_selector (str): Kubernetes label selector
-            target_phase (str): Target pod phase ('Running', 'Succeeded', etc)
-            timeout (int): Maximum time to wait in seconds
-        """
-        config.load_kube_config()
-        core_v1 = client.CoreV1Api()
-
-        start_time = time.time()
-
-        # Keep track of pods we've seen reach the target state
-        completed_pods = set()
-
-        w = watch.Watch()
-        try:
-            for event in w.stream(
-                core_v1.list_namespaced_pod,
-                namespace="default",
-                label_selector=label_selector,
-            ):
-                pod = event['object']
-                pod_name = pod.metadata.name
-                current_phase = pod.status.phase
-
-                if current_phase == target_phase and pod_name not in completed_pods:
-                    completed_pods.add(pod_name)
-                    print(f"Pod {pod_name} reached state: {target_phase}")
-
-                # Get total count of pods with this selector
-                pod_list = core_v1.list_namespaced_pod(
-                    namespace="default", 
-                    label_selector=label_selector
-                )
-                total_pods = len(pod_list.items)
-
-                # If all pods are ready, we're done
-                if len(completed_pods) == total_pods and total_pods > 0:
-                    print(f"All {total_pods} pods with selector '{label_selector}' are in {target_phase} state!")
-                    w.stop()
-
-                    # Add extra waiting period after pods are ready
-                    print(f"Waiting 5 additional seconds for services to initialize...")
-                    time.sleep(5)
-                    print("Extra waiting period complete.")
-
-                    return
-
-                # Status update every 10 seconds
-                elapsed = time.time() - start_time
-                if int(elapsed) % 10 == 0:
-                    print(f"Waiting: {len(completed_pods)}/{total_pods} pods in {target_phase} state ({elapsed:.0f}s elapsed)")
-
-
-        except Exception as e:
-            print(f"Error watching pods: {e}")
-        finally:
-            w.stop()
-
-    @KeplerMetrics.measure_power
-    def deploy(self) -> None:
+        super().__init__("postgres")
+        
+    def deploy(self):
+        super().deploy()
+        self.record_timestamp("postgres_deploy_start")
         config.load_kube_config()
         k8s_client = client.ApiClient()
-
         manifest_path = os.path.join(os.path.dirname(__file__), 'postgres-manifest.yaml')
         utils.create_from_yaml(k8s_client, manifest_path)
-
-        # Wait for PostgreSQL pod to be running
-        print("Waiting for PostgreSQL pods to be ready...")
         self._wait_for_pods_ready("app=postgres", "Running")
         print("PostgreSQL deployment complete!")
+        self.record_timestamp("postgres_deploy_end")
 
-        # Load the PostgreSQL manifest
-        #with open("postgres-manifest.yaml") as f:
-        #    manifest = list(yaml.safe_load_all(f))
+        
+    def run(self):
+        self.record_timestamp("postgres_run_start")
+        super().run()
 
-        # Apply the manifest
-        # print("\nDeploying PostgreSQL to cluster\n")
-        #for m in manifest:
-        #    if m is not None:
-        #        utils.create_from_dict(k8s_client, m)
-        #    else:
-        #        print("Warning: Encountered a NoneType object in the manifest. Skipping.")
 
-    @KeplerMetrics.measure_power
-    def setup(self):
+class StudyCreatorComponent(BenchmarkComponent):
+    def __init__(self):
+        super().__init__("study_creator")
+        
+    def deploy(self):
+        self.record_timestamp("study_creator_deploy_start")
         config.load_kube_config()
         k8s_client = client.ApiClient()
-
-        # Wait for study-creator job to complete
-
-        # Load the experiment manifest
-        #with open("k8s-manifest.yaml") as f:
-            #manifest = list(yaml.safe_load_all(f))
-
-        # Apply the manifest
-        #print("\nDeploying experiment to cluster\n")
-        #command = ['kubectl', 'apply', '-f', 'k8s-manifest.yaml']
-        #subprocess.run(command, check=True)
-        #utils.create_from_yaml(k8s_client, "postgres-manifest.yaml")
-
 
         manifest_path = os.path.join(os.path.dirname(__file__), "study-creator.yaml")
         utils.create_from_yaml(k8s_client, manifest_path)
-        #for m in manifest:
-        #    if m is not None:
-        #        utils.create_from_dict(k8s_client, m)
-        #    else:
-        #        print("Warning: Encountered a NoneType object in the manifest. Skipping.")
+
         print("Waiting for study-creator job to complete...")
         self._wait_for_pods_ready("job-name=study-creator", "Succeeded")
         print("Study setup complete!")
-
-    @KeplerMetrics.measure_power
+        self.record_timestamp("study_creator_deploy_end")
+        
     def run(self):
+        self.record_timestamp("study_creator_run_start")
+        super().run()
+
+
+class WorkerComponent(BenchmarkComponent):
+    def __init__(self, worker_count=5):
+        super().__init__("workers")
+        self.worker_count = worker_count
+
+    def deploy(self):
+        self.record_timestamp("worker_deploy_start")
+        super().deploy()
         config.load_kube_config()
         k8s_client = client.ApiClient()
-        core_v1 = client.CoreV1Api()
-        batch_v1 = client.BatchV1Api()
 
         manifest_path = os.path.join(os.path.dirname(__file__), "worker.yaml")
         utils.create_from_yaml(k8s_client, manifest_path)
+
         # Wait for the pods to start (initial delay)
         print("Waiting for worker pods to start...")
         time.sleep(10)
+        self.record_timestamp("worker_deploy_end")
 
+    def run(self):
         # Get the job to determine expected completions
-        job = batch_v1.read_namespaced_job(name="worker", namespace="default")
-        #expected_completions = job.spec.completions or 5
-        expected_completions = 5
+        self.record_timestamp("worker_run_start")
+        core_v1 = client.CoreV1Api() 
+        
+        expected_completions = self.worker_count
         print(f"Job expects {expected_completions} completions")
 
         # Set up monitoring
         completed_pods = set()
-        start_time = time.time()
 
         # Create a watch for pod status changes
         w = watch.Watch()
@@ -198,23 +126,35 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
                         print("All worker pods have completed successfully!")
                         w.stop()
                         break
-                
 
         except Exception as e:
             print(f"Error watching pods: {e}")
         finally:
             # Make sure we stop the watch
             w.stop()
+        
+        self.record_timestamp("worker_run_end")
+        
+        if self.postgres_component:
+            self.postgres_component.record_timestamp("postgres_run_end")
+        
+        if self.study_creator_component:
+            self.study_creator_component.record_timestamp("study_creator_run_end")
 
         # Final status report
-        elapsed = time.time() - start_time
-        print(f"Training job monitoring completed after {elapsed:.1f} seconds")
         print(f"Completed pods: {len(completed_pods)}/{expected_completions}")
+        
 
-    @KeplerMetrics.measure_power
-    def undeploy(self):
 
-        pass
+
+class OptunaBenchmark(Benchmark, KeplerMetrics):
+
+    def __init__(self):
+        Benchmark.__init__(self)  # Initialize the Benchmark class
+        KeplerMetrics.__init__(self)  # Initialize the KeplerMetrics class
+
+
+
 
 def main():
     
@@ -236,6 +176,13 @@ def main():
         # Set Docker environment variables for Minikube
         build_docker_image("optuna-kubernetes-mlflow3:example")
         load_docker_image_into_kind("optuna-kubernetes-mlflow3:example")
+
+        postgres = PostgresComponent()
+        study_creator = StudyCreatorComponent()
+        workers = WorkerComponent(worker_count=5, postgres_component=postgres, study_creator_component=study_creator)
+        
+        ob.components = [postgres, study_creator, workers]
+
         ob = OptunaBenchmark()
         runner = BenchmarkRunner(benchmark_cls=ob)
         runner.run()

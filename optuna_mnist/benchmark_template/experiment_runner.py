@@ -5,6 +5,8 @@ import random
 from abc import ABC, abstractmethod
 from datetime import datetime
 from time import sleep
+from kubernetes import client, config, utils, watch
+import time
 
 import docker
 import numpy as np
@@ -19,42 +21,105 @@ class Benchmark(ABC):
     will most likely not run properly if the variables value remains to be "None".
     """
 
-    # TODO: objective and grid are not allowed to be in the benchmark
-    resources = None
+    def __init__(self):
+        """Initialize the benchmark with an empty components dictionary."""
+        self.components = {} 
 
-    @abstractmethod
-    def deploy(self) -> None:
-        """
-            With the completion of this step the desired architecture of the HPO Framework should be running
-            on a platform, e.g,. in the case of Kubernetes it referes to the steps nassary to deploy all pods
-            and services in kubernetes.
-        """
-        pass
 
-    @abstractmethod
-    def setup(self):
-        """
-        Every Operation that is needed before the actual optimization (trial) starts and that is not relevant
-        for starting up workers or the necessary architecture.
-        """
-        pass
-
-    @abstractmethod
+class BenchmarkComponent:
+    """
+    A component of a benchmark that can be deployed, set up, run, and undeployed.
+    Used for creating modular benchmarks where each component handles a specific part
+    of the benchmark (e.g., database, workers, etc.).
+    """
+    
+    def __init__(self, name):
+        """Initialize a benchmark component with a name."""
+        self.name = name
+    
+    def record_timestamp(self, event_name):
+        """Record a timestamp for a specific event"""
+        self.timestamps[event_name] = time.time()
+        return self.timestamps[event_name]
+    
+    def get_timestamp(self, event_name):
+        """Get a timestamp for a specific event"""
+        return self.timestamps.get(event_name)
+        
+    def get_duration(self, start_event, end_event):
+        """Calculate duration between two events"""
+        if start_event in self.timestamps and end_event in self.timestamps:
+            return self.timestamps[end_event] - self.timestamps[start_event]
+        return None
+    
+    def deploy(self):
+        """Deploy this component."""
+        print(f"Deploying component: {self.name}")
+    
     def run(self):
-        """
-            Executing the hyperparameter optimization on the deployed platfrom.
-            use the metrics object to collect and store all measurments on the workers.
-        """
-        pass
-
-    @abstractmethod
+        """Run this component."""
+        print(f"Running component: {self.name}")
+    
     def undeploy(self):
-        # TODO: might be moved before collecting all metrics
+        """Undeploy this component."""
+        print(f"Undeploying component: {self.name}")
+    
+    def _wait_for_pods_ready(self, label_selector, target_phase):
         """
-            The clean-up procedure to undeploy all components of the HPO Framework that were deployed in the
-            Deploy step.
+        Wait for pods matching the label selector to reach the target phase.
+
+        Args:
+            label_selector (str): Kubernetes label selector
+            target_phase (str): Target pod phase ('Running', 'Succeeded', etc)
+            timeout (int): Maximum time to wait in seconds
         """
-        pass
+        config.load_kube_config()
+        core_v1 = client.CoreV1Api()
+
+        start_time = time.time()
+
+        # Keep track of pods we've seen reach the target state
+        completed_pods = set()
+
+        w = watch.Watch()
+        try:
+            for event in w.stream(
+                core_v1.list_namespaced_pod,
+                namespace="default",
+                label_selector=label_selector,
+            ):
+                pod = event['object']
+                pod_name = pod.metadata.name
+                current_phase = pod.status.phase
+
+                if current_phase == target_phase and pod_name not in completed_pods:
+                    completed_pods.add(pod_name)
+                    print(f"Pod {pod_name} reached state: {target_phase}")
+
+                # Get total count of pods with this selector
+                pod_list = core_v1.list_namespaced_pod(
+                    namespace="default", 
+                    label_selector=label_selector
+                )
+                total_pods = len(pod_list.items)
+
+                # If all pods are ready, we're done
+                if len(completed_pods) == total_pods and total_pods > 0:
+                    print(f"All {total_pods} pods with selector '{label_selector}' are in {target_phase} state!")
+                    w.stop()
+
+                    return
+
+                # Status update every 10 seconds
+                elapsed = time.time() - start_time
+                if int(elapsed) % 10 == 0:
+                    print(f"Waiting: {len(completed_pods)}/{total_pods} pods in {target_phase} state ({elapsed:.0f}s elapsed)")
+
+
+        except Exception as e:
+            print(f"Error watching pods: {e}")
+        finally:
+            w.stop()
 
 
 class BenchmarkRunner():
@@ -99,21 +164,39 @@ class BenchmarkRunner():
         # set seeds
         #self._set_all_seeds()
 
-    def run(self):
+    def run(self, workflow):
         """
-        Runs all functions of a Benchmark and records its latencies. Saves the results afterwards
-        in a predefined folder.
+        Runs all functions of a Benchmark using either a custom workflow or the default sequence.
 
-        Raises:
-            ValueError: _description_
+        Args:
+            custom_workflow (list, optional): List of (component_name, method_name) tuples defining 
+                                              the execution order.
+
+        Example custom_workflow:
+            [
+                ("postgres", "deploy"),
+                ("postgres", "setup"), 
+                ("study_creator", "deploy"),
+                ("workers", "deploy"),
+                ("workers", "run")
+            ]
         """
-        benchmark_results = None
-
-
-        
-        self.benchmark.deploy()
-        self.benchmark.setup()
-        self.benchmark.run()
-        
-
+ 
+        # Execute the custom workflow
+        print("Executing custom workflow")
+        # Check if the benchmark has components
+        if not hasattr(self.benchmark, 'components'):
+            raise ValueError("Benchmark must have a 'components' dictionary to use custom workflow")
+        # Execute each step in the workflow
+        for component_name, method_name in workflow:
+            if component_name not in self.benchmark.components:
+                raise ValueError(f"Component '{component_name}' not found in benchmark")
+            component = self.benchmark.components[component_name]
+            if not hasattr(component, method_name):
+                raise ValueError(f"Method '{method_name}' not found in component '{component_name}'")
+            # Execute the step
+            print(f"Executing {component_name}.{method_name}()")
+            method = getattr(component, method_name)
+            method()
+    
 
