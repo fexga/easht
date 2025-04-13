@@ -12,9 +12,4 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
     -f prometheus-values.yaml \
     --wait
 
-helm upgrade prometheus prometheus-community/kube-prometheus-stack \
-    --namespace monitoring \
-    -f prometheus-values.yaml \
-    --wait
-
 echo "Setup complete!"

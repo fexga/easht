@@ -36,7 +36,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
     def __init__(self):
         KeplerMetrics.__init__(self)  # Initialize the KeplerMetrics class
 
-    def _wait_for_pods_ready(self, label_selector, target_phase, timeout=300):
+    def _wait_for_pods_ready(self, label_selector, target_phase):
         """
         Wait for pods matching the label selector to reach the target phase.
 
@@ -59,7 +59,6 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
                 core_v1.list_namespaced_pod,
                 namespace="default",
                 label_selector=label_selector,
-                timeout_seconds=timeout
             ):
                 pod = event['object']
                 pod_name = pod.metadata.name
@@ -80,6 +79,12 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
                 if len(completed_pods) == total_pods and total_pods > 0:
                     print(f"All {total_pods} pods with selector '{label_selector}' are in {target_phase} state!")
                     w.stop()
+
+                    # Add extra waiting period after pods are ready
+                    print(f"Waiting 5 additional seconds for services to initialize...")
+                    time.sleep(5)
+                    print("Extra waiting period complete.")
+
                     return
 
                 # Status update every 10 seconds
@@ -87,11 +92,6 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
                 if int(elapsed) % 10 == 0:
                     print(f"Waiting: {len(completed_pods)}/{total_pods} pods in {target_phase} state ({elapsed:.0f}s elapsed)")
 
-                # Check for timeout
-                if elapsed > timeout:
-                    print(f"Timeout waiting for pods with selector '{label_selector}' to reach {target_phase} state")
-                    w.stop()
-                    return
 
         except Exception as e:
             print(f"Error watching pods: {e}")
@@ -220,6 +220,8 @@ def main():
     
     # Set up port forwarding to Prometheus
     
+    # Set up port forwarding to Prometheus
+    
     prometheus_process = subprocess.Popen(
         ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],
         stdout=subprocess.PIPE,
@@ -232,7 +234,6 @@ def main():
     
     try:
         # Set Docker environment variables for Minikube
-        subprocess.run(["eval", "$(minikube -p docker-env)"], shell=True, check=True)
         build_docker_image("optuna-kubernetes-mlflow3:example")
         load_docker_image_into_kind("optuna-kubernetes-mlflow3:example")
         ob = OptunaBenchmark()

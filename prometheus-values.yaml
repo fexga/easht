@@ -1,7 +1,7 @@
 prometheus:
   prometheusSpec:
-    scrapeInterval: 3s
-    scrapeTimeout: 3s
+    scrapeInterval: 2s
+    scrapeTimeout: 1s
     evaluationInterval: 5s
     
     # Monitor settings

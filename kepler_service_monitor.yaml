@@ -26,7 +26,7 @@ spec:
       - kepler
   endpoints:
     - interval: 1s
-      scrapeTimeout: 2s
+      scrapeTimeout: 1s
       port: http
       path: /metrics
       scheme: http
