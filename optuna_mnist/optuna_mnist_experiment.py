@@ -242,7 +242,7 @@ def main():
 
         ob.calculate_energy_metrics()
 
-        ob.save_metrics("optuna_mnist_resource_metrics.csv")
+        ob.save_metrics("optuna_mnist_resource_metrics.json")
     
     
     finally:
