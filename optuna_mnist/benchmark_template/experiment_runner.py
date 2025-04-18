@@ -114,6 +114,7 @@ class BenchmarkRunner():
         self.benchmark.deploy()
         self.benchmark.setup()
         self.benchmark.run()
+        self.benchmark.undeploy()
         
 
 

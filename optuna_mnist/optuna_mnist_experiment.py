@@ -213,9 +213,64 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
     @KeplerMetrics.measure_power
     def undeploy(self):
-
-        pass
-
+        """Delete the PostgreSQL database, worker, and study-creator from Kubernetes and wait until they are gone."""
+        config.load_kube_config()
+        batch_v1 = client.BatchV1Api()
+        core_v1 = client.CoreV1Api()
+        apps_v1 = client.AppsV1Api()
+    
+        # Define the resources to delete
+        resources = [
+            {"kind": "Job", "name": "worker", "namespace": "default", "api": batch_v1.delete_namespaced_job},
+            {"kind": "Job", "name": "study-creator", "namespace": "default", "api": batch_v1.delete_namespaced_job},
+            {"kind": "StatefulSet", "name": "postgres", "namespace": "default", "api": apps_v1.delete_namespaced_stateful_set},
+            {"kind": "Service", "name": "postgres", "namespace": "default", "api": core_v1.delete_namespaced_service},
+            {"kind": "Secret", "name": "postgres-secrets", "namespace": "default", "api": core_v1.delete_namespaced_secret},
+        ]
+    
+        # Delete each resource
+        for resource in resources:
+            try:
+                print(f"Deleting {resource['kind']} {resource['name']}...")
+                if resource["kind"] == "Job":
+                    # Use propagation_policy="Foreground" to delete pods created by the Job
+                    resource["api"](name=resource["name"], namespace=resource["namespace"], body=client.V1DeleteOptions(propagation_policy="Foreground"))
+                else:
+                    resource["api"](name=resource["name"], namespace=resource["namespace"], body=client.V1DeleteOptions())
+            except client.exceptions.ApiException as e:
+                if e.status == 404:
+                    print(f"{resource['kind']} {resource['name']} not found, skipping.")
+                else:
+                    print(f"Error deleting {resource['kind']} {resource['name']}: {e}")
+    
+        # Wait for all resources to be deleted
+        print("Waiting for resources to be deleted...")
+        start_time = time.time()
+        while True:
+            remaining_resources = []
+            for resource in resources:
+                try:
+                    if resource["kind"] == "Job":
+                        batch_v1.read_namespaced_job(name=resource["name"], namespace=resource["namespace"])
+                    elif resource["kind"] == "StatefulSet":
+                        apps_v1.read_namespaced_stateful_set(name=resource["name"], namespace=resource["namespace"])
+                    elif resource["kind"] == "Service":
+                        core_v1.read_namespaced_service(name=resource["name"], namespace=resource["namespace"])
+                    elif resource["kind"] == "Secret":
+                        core_v1.read_namespaced_secret(name=resource["name"], namespace=resource["namespace"])
+                    remaining_resources.append(resource["name"])
+                except client.exceptions.ApiException as e:
+                    if e.status != 404:  # 404 means the resource is not found (deleted)
+                        print(f"Error checking {resource['kind']} {resource['name']}: {e}")
+    
+            if not remaining_resources:
+                print("All resources have been successfully deleted.")
+                break
+            
+            elapsed_time = time.time() - start_time
+            print(f"Still waiting for resources to be deleted: {', '.join(remaining_resources)} ({elapsed_time:.1f}s elapsed)")
+            time.sleep(5)
+    
 def main():
     
     # Set up port forwarding to Prometheus
