@@ -12,4 +12,7 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
     -f prometheus-values.yaml \
     --wait
 
+echo "Deploying cAdvisor..."
+kubectl apply -f cadvisor.yaml
+
 echo "Setup complete!"

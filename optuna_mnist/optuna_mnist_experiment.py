@@ -82,7 +82,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
                     # Add extra waiting period after pods are ready
                     print(f"Waiting 5 additional seconds for services to initialize...")
-                    time.sleep(5)
+                    time.sleep(10)
                     print("Extra waiting period complete.")
 
                     return
@@ -213,63 +213,70 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
     @KeplerMetrics.measure_power
     def undeploy(self):
-        """Delete the PostgreSQL database, worker, and study-creator from Kubernetes and wait until they are gone."""
+        """Delete all resources in the namespace and wait until they are gone."""
         config.load_kube_config()
-        batch_v1 = client.BatchV1Api()
         core_v1 = client.CoreV1Api()
         apps_v1 = client.AppsV1Api()
+        namespace = "default"  # Specify the namespace
     
-        # Define the resources to delete
-        resources = [
-            {"kind": "Job", "name": "worker", "namespace": "default", "api": batch_v1.delete_namespaced_job},
-            {"kind": "Job", "name": "study-creator", "namespace": "default", "api": batch_v1.delete_namespaced_job},
-            {"kind": "StatefulSet", "name": "postgres", "namespace": "default", "api": apps_v1.delete_namespaced_stateful_set},
-            {"kind": "Service", "name": "postgres", "namespace": "default", "api": core_v1.delete_namespaced_service},
-            {"kind": "Secret", "name": "postgres-secrets", "namespace": "default", "api": core_v1.delete_namespaced_secret},
-        ]
+        print(f"Deleting all resources in namespace '{namespace}'...")
     
-        # Delete each resource
-        for resource in resources:
+        # Delete the StatefulSet
+        try:
+            print("Deleting StatefulSet: postgres...")
+            apps_v1.delete_namespaced_stateful_set(name="postgres", namespace=namespace)
+        except client.exceptions.ApiException as e:
+            if e.status == 404:
+                print("StatefulSet 'postgres' not found, skipping.")
+            else:
+                print(f"Error deleting StatefulSet 'postgres': {e}")
+    
+        # List all pods in the namespace
+        pods = core_v1.list_namespaced_pod(namespace=namespace)
+        pod_names = [pod.metadata.name for pod in pods.items]
+    
+        # Delete each pod
+        for pod_name in pod_names:
             try:
-                print(f"Deleting {resource['kind']} {resource['name']}...")
-                if resource["kind"] == "Job":
-                    # Use propagation_policy="Foreground" to delete pods created by the Job
-                    resource["api"](name=resource["name"], namespace=resource["namespace"], body=client.V1DeleteOptions(propagation_policy="Foreground"))
-                else:
-                    resource["api"](name=resource["name"], namespace=resource["namespace"], body=client.V1DeleteOptions())
+                print(f"Deleting pod: {pod_name}...")
+                core_v1.delete_namespaced_pod(name=pod_name, namespace=namespace, body=client.V1DeleteOptions())
             except client.exceptions.ApiException as e:
                 if e.status == 404:
-                    print(f"{resource['kind']} {resource['name']} not found, skipping.")
+                    print(f"Pod {pod_name} not found, skipping.")
                 else:
-                    print(f"Error deleting {resource['kind']} {resource['name']}: {e}")
+                    print(f"Error deleting pod {pod_name}: {e}")
     
-        # Wait for all resources to be deleted
-        print("Waiting for resources to be deleted...")
+        # Use a watch stream to wait for all pods to be deleted
+        print("Waiting for all pods to be deleted...")
+        w = watch.Watch()
         start_time = time.time()
-        while True:
-            remaining_resources = []
-            for resource in resources:
-                try:
-                    if resource["kind"] == "Job":
-                        batch_v1.read_namespaced_job(name=resource["name"], namespace=resource["namespace"])
-                    elif resource["kind"] == "StatefulSet":
-                        apps_v1.read_namespaced_stateful_set(name=resource["name"], namespace=resource["namespace"])
-                    elif resource["kind"] == "Service":
-                        core_v1.read_namespaced_service(name=resource["name"], namespace=resource["namespace"])
-                    elif resource["kind"] == "Secret":
-                        core_v1.read_namespaced_secret(name=resource["name"], namespace=resource["namespace"])
-                    remaining_resources.append(resource["name"])
-                except client.exceptions.ApiException as e:
-                    if e.status != 404:  # 404 means the resource is not found (deleted)
-                        print(f"Error checking {resource['kind']} {resource['name']}: {e}")
     
-            if not remaining_resources:
-                print("All resources have been successfully deleted.")
-                break
-            
-            elapsed_time = time.time() - start_time
-            print(f"Still waiting for resources to be deleted: {', '.join(remaining_resources)} ({elapsed_time:.1f}s elapsed)")
-            time.sleep(5)
+        try:
+            for event in w.stream(core_v1.list_namespaced_pod, namespace=namespace):
+                pod = event['object']
+                pod_name = pod.metadata.name
+                event_type = event['type']
+    
+                if event_type == "DELETED":
+                    print(f"Pod {pod_name} has been deleted.")
+    
+                # Check if there are any remaining pods
+                remaining_pods = core_v1.list_namespaced_pod(namespace=namespace).items
+                if not remaining_pods:
+                    print("All pods have been successfully deleted.")
+                    w.stop()
+                    break
+                
+                # Status update every 10 seconds
+                elapsed_time = time.time() - start_time
+                if int(elapsed_time) % 10 == 0:
+                    remaining_pod_names = [pod.metadata.name for pod in remaining_pods]
+                    print(f"Still waiting for pods to be deleted: {', '.join(remaining_pod_names)} ({elapsed_time:.1f}s elapsed)")
+    
+        except Exception as e:
+            print(f"Error watching pods: {e}")
+        finally:
+            w.stop()
     
 def main():
     
