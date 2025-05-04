@@ -7,8 +7,10 @@ import subprocess
 import sys
 from kepler_metrics import KeplerMetrics
 import time
+import optuna
+from dotenv import dotenv_values
 
-from benchmark_template.experiment_runner import BenchmarkRunner, Benchmark
+from benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, validate_env_vars
 
 def build_docker_imageold():
     client = docker.from_env()
@@ -29,6 +31,66 @@ def push_docker_image(image_name):
     client = docker.from_env()
     print(f"Pushing Docker Image {image_name}\n")
     client.images.push(image_name)
+
+def get_node_ip():
+    # Load Kubernetes configuration
+    config.load_kube_config()
+
+    # Initialize the CoreV1Api
+    core_v1 = client.CoreV1Api()
+
+    # Get the list of nodes
+    nodes = core_v1.list_node()
+
+    # Try to find an external IP first
+    for node in nodes.items:
+        for address in node.status.addresses:
+            if address.type == "ExternalIP":
+                return address.address
+
+    # If no external IP is found, fall back to internal IP
+    for node in nodes.items:
+        for address in node.status.addresses:
+            if address.type == "InternalIP":
+                return address.address
+
+    # If no IP is found, raise an exception
+    raise RuntimeError("No node with an ExternalIP or InternalIP found in the cluster.")
+
+def create_configmap_from_env(env_file_path, configmap_name, namespace="default"):
+    """
+    Create a Kubernetes ConfigMap from a .env file.
+
+    Args:
+        env_file_path (str): Path to the .env file.
+        configmap_name (str): Name of the ConfigMap to create.
+        namespace (str): Kubernetes namespace to create the ConfigMap in.
+    """
+    # Load the .env file
+    env_vars = dotenv_values(env_file_path)
+
+    # Load Kubernetes configuration
+    config.load_kube_config()
+
+    # Define the ConfigMap data
+    configmap_data = {key: str(value) for key, value in env_vars.items()}
+
+    # Create the ConfigMap object
+    configmap = client.V1ConfigMap(
+        metadata=client.V1ObjectMeta(name=configmap_name),
+        data=configmap_data
+    )
+
+    # Create the ConfigMap in the specified namespace
+    core_v1 = client.CoreV1Api()
+    try:
+        core_v1.create_namespaced_config_map(namespace=namespace, body=configmap)
+        print(f"ConfigMap '{configmap_name}' created successfully in namespace '{namespace}'.")
+    except client.exceptions.ApiException as e:
+        if e.status == 409:  # Conflict: ConfigMap already exists
+            print(f"ConfigMap '{configmap_name}' already exists. Skipping creation.")
+        else:
+            print(f"Error creating ConfigMap: {e}")
 
 
 class OptunaBenchmark(Benchmark, KeplerMetrics):
@@ -82,7 +144,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
                     # Add extra waiting period after pods are ready
                     print(f"Waiting 5 additional seconds for services to initialize...")
-                    time.sleep(10)
+                    time.sleep(15)
                     print("Extra waiting period complete.")
 
                     return
@@ -98,7 +160,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         finally:
             w.stop()
 
-    @KeplerMetrics.measure_power
+    @KeplerMetrics.measure_power(aggregation_method='sum')
     def deploy(self) -> None:
         config.load_kube_config()
         k8s_client = client.ApiClient()
@@ -123,7 +185,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         #    else:
         #        print("Warning: Encountered a NoneType object in the manifest. Skipping.")
 
-    @KeplerMetrics.measure_power
+    @KeplerMetrics.measure_power(aggregation_method='sum')
     def setup(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
@@ -152,7 +214,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         self._wait_for_pods_ready("job-name=study-creator", "Succeeded")
         print("Study setup complete!")
 
-    @KeplerMetrics.measure_power
+    @KeplerMetrics.measure_power(aggregation_method='sum')
     def run(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
@@ -168,7 +230,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         # Get the job to determine expected completions
         job = batch_v1.read_namespaced_job(name="worker", namespace="default")
         #expected_completions = job.spec.completions or 5
-        expected_completions = 5
+        expected_completions = 3
         print(f"Job expects {expected_completions} completions")
 
         # Set up monitoring
@@ -211,7 +273,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         print(f"Training job monitoring completed after {elapsed:.1f} seconds")
         print(f"Completed pods: {len(completed_pods)}/{expected_completions}")
 
-    @KeplerMetrics.measure_power
+    @KeplerMetrics.measure_power(aggregation_method='rate')
     def undeploy(self):
         """Delete all resources in the namespace and wait until they are gone."""
         config.load_kube_config()
@@ -281,8 +343,14 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 def main():
     
     # Set up port forwarding to Prometheus
+    env_file_path = os.path.join(os.path.dirname(__file__), ".env")
+    
+
+    # Create the ConfigMap from the .env file
+    create_configmap_from_env(env_file_path, configmap_name="training-config")
     
     # Set up port forwarding to Prometheus
+    REQUIRED_ENV_VARS = ["BATCHSIZE", "EPOCHS", "PERCENT_VALID_EXAMPLES", "CLASSES"]
     
     prometheus_process = subprocess.Popen(
         ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],
@@ -300,18 +368,41 @@ def main():
         load_docker_image_into_kind("optuna-kubernetes-mlflow3:example")
         ob = OptunaBenchmark()
         runner = BenchmarkRunner(benchmark_cls=ob)
+        validate_env_vars(REQUIRED_ENV_VARS)
         runner.run()
 
         ob.calculate_energy_metrics()
 
-        ob.save_metrics("optuna_mnist_resource_metrics.json")
+        node_ip = get_node_ip()
+
+        # Retrieve the best score from the Optuna database
+        study = optuna.create_study(
+            study_name="k8s_mlflow",
+            storage=f"postgresql://optuna:superSecretPassword@{node_ip}:30032/optunaDatabase",
+            load_if_exists=True
+        )
+         
+
+        time.sleep(20)
+        
+        best_trial = study.best_trial
+        best_score = best_trial.value  # Best validation accuracy or F1 score
+
+        # Save metrics with the best score
+        ob.save_metrics("optuna_mnist_resource_metrics.json", f1_score=best_score)
     
-    
+
     finally:
+        pass
+    '''
         # Stop port forwarding to Prometheus
         if prometheus_process:
             prometheus_process.terminate()
             print("Prometheus port forwarding stopped")
+        if postgres_process:
+            postgres_process.terminate()
+            print("Postgres port forwarding stopped")
+    '''
     
 
 

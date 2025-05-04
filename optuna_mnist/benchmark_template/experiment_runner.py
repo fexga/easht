@@ -5,6 +5,7 @@ import random
 from abc import ABC, abstractmethod
 from datetime import datetime
 from time import sleep
+from dotenv import load_dotenv
 
 import docker
 import numpy as np
@@ -98,6 +99,7 @@ class BenchmarkRunner():
 
         # set seeds
         #self._set_all_seeds()
+    
 
     def run(self):
         """
@@ -114,7 +116,14 @@ class BenchmarkRunner():
         self.benchmark.deploy()
         self.benchmark.setup()
         self.benchmark.run()
-        self.benchmark.undeploy()
+        #self.benchmark.undeploy()
+
+
+def validate_env_vars(required_vars):
+    load_dotenv()
+    missing_vars = [var for var in required_vars if os.getenv(var) is None]
+    if missing_vars:
+        raise EnvironmentError(f"Missing required environment variables: {', '.join(missing_vars)}")
         
 
 

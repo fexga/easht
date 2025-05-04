@@ -11,10 +11,11 @@ import torch.utils.data
 from torchvision import datasets
 from torchvision import transforms
 
-PERCENT_VALID_EXAMPLES = 0.1
-BATCHSIZE = 128
-CLASSES = 10
-EPOCHS = 1
+
+PERCENT_VALID_EXAMPLES = float(os.environ["PERCENT_VALID_EXAMPLES"])
+BATCHSIZE = int(os.environ["BATCHSIZE"])
+CLASSES = int(os.environ["CLASSES"])
+EPOCHS = int(os.environ["EPOCHS"])
 DIR = os.getcwd()
 MODEL_DIR = os.path.join(DIR, "result")
 

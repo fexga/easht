@@ -4,7 +4,7 @@ kind: Job
 metadata:
   name: worker
 spec:
-  parallelism: 5
+  parallelism: 3
   template:
     spec:
       restartPolicy: OnFailure
@@ -23,6 +23,8 @@ spec:
           envFrom:
             - secretRef:
                 name: postgres-secrets
+            - configMapRef:
+                name: training-config
       containers:
         - name: worker
           image: optuna-kubernetes-mlflow3:example
@@ -33,4 +35,6 @@ spec:
           envFrom:
             - secretRef:
                 name: postgres-secrets
+            - configMapRef:
+                name: training-config
 ---

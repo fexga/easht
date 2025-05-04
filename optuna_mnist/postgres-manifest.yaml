@@ -14,11 +14,13 @@ kind: Service
 metadata:
   name: postgres
 spec:
-  type: ClusterIP
-  selector:
-    app: postgres
+  type: NodePort  # Change from ClusterIP to NodePort
   ports:
     - port: 5432
+      targetPort: 5432
+      nodePort: 30032  # Specify a port in the range 30000-32767
+  selector:
+    app: postgres
 ---
 apiVersion: apps/v1
 kind: StatefulSet
