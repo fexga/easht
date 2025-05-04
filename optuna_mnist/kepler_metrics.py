@@ -3,12 +3,16 @@ import functools
 import pandas as pd
 import requests
 import json
+from dotenv import load_dotenv, dotenv_values
+import os
+
 
 class KeplerMetrics:
     def __init__(self, prometheus_url="http://localhost:9090/api/v1/query"):
         self.prometheus_url = prometheus_url
         self.metrics = {}
         self.timestamps = {}
+        load_dotenv(".env")
         
     def measure_power(aggregation_method='sum'):
         def decorator(method):
@@ -75,10 +79,61 @@ class KeplerMetrics:
 
                 self._calculate_gpu_rate(step_name, start_time, end_time, duration)
 
-            self._calculate_network_metrics(step_name, start_time, end_time, duration)
-                
-
         self._calculate_totals()
+
+        self._calculate_network_metrics(step_name, start_time, end_time, duration)
+
+        self._calculate_epoch_metrics()
+
+        self._add_env_to_meta()
+
+    def _calculate_epoch_metrics(self):
+        """
+        Calculate adjusted energy consumption based on the number of epochs.
+        Formula: (number of epochs / 1000) * energy consumption of the 'run' step.
+        """
+        # Load the number of epochs from the .env file
+        epochs = int(os.getenv("EPOCHS"))  # Default to 1 if not set
+
+        # Ensure the 'run' step metrics exist
+        if "run" in self.metrics and "total_energy_joules" in self.metrics["run"]:
+            total_energy_joules = self.metrics["run"]["total_energy_joules"]
+            total_energy_cf = self.metrics["run"]["total_energy_cf"]
+
+            # Calculate adjusted energy
+            energy_per_1000epochs = (1000 / epochs) * total_energy_joules
+            cf_per_1000epochs = (1000 / epochs) * total_energy_cf
+
+            if "meta" not in self.metrics:
+                self.metrics["meta"] = {}
+
+            self.metrics["meta"].update({
+                "epochs": epochs,
+                "adjusted_energy_joules": energy_per_1000epochs,
+                "adjusted_carbon_footprint": cf_per_1000epochs
+            })
+
+            print(f"Adjusted energy saved in 'meta': {energy_per_1000epochs:.2f} joules")
+            print(f"Adjusted carbon footprint saved in 'meta': {cf_per_1000epochs:.4f} kgCO2e")
+        else:
+            print("Metrics for 'run' step or 'total_energy_joules' not found.")
+
+    def _add_env_to_meta(self):
+        """
+        Add all values from the .env file to the 'meta' field in the metrics.
+        """
+        # Load all values from the .env file into a dictionary
+        env_file_path = os.path.join(os.path.dirname(__file__), ".env")
+        env_vars = dotenv_values(env_file_path)
+
+        # Ensure the 'meta' field exists in the metrics
+        if "meta" not in self.metrics:
+            self.metrics["meta"] = {}
+
+        # Add the environment variables to the 'meta' field
+        self.metrics["meta"].update(env_vars)
+        print(f"Added environment variables to 'meta': {env_vars}")
+
             
 
     def _calculate_total_energy(self, step_name, start_time, end_time, duration):
