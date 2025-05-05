@@ -373,23 +373,8 @@ def main():
 
         ob.calculate_energy_metrics()
 
-        node_ip = get_node_ip()
-
-        # Retrieve the best score from the Optuna database
-        study = optuna.create_study(
-            study_name="k8s_mlflow",
-            storage=f"postgresql://optuna:superSecretPassword@{node_ip}:30032/optunaDatabase",
-            load_if_exists=True
-        )
-         
-
-        time.sleep(20)
-        
-        best_trial = study.best_trial
-        best_score = best_trial.value  # Best validation accuracy or F1 score
-
         # Save metrics with the best score
-        ob.save_metrics("optuna_mnist_resource_metrics.json", f1_score=best_score)
+        ob.save_metrics("optuna_mnist_resource_metrics.json")
     
 
     finally:
