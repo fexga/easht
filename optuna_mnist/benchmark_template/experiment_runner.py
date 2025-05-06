@@ -116,7 +116,7 @@ class BenchmarkRunner():
         self.benchmark.deploy()
         self.benchmark.setup()
         self.benchmark.run()
-        #self.benchmark.undeploy()
+        self.benchmark.undeploy()
 
 
 def validate_env_vars(required_vars):

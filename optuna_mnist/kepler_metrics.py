@@ -14,6 +14,7 @@ class KeplerMetrics:
         self.prometheus_url = prometheus_url
         self.metrics = {"steps": {}}
         self.timestamps = {}
+        self.b_f1_Score = 0
         load_dotenv(".env")
         
     def measure_power(aggregation_method='sum'):
@@ -140,7 +141,7 @@ class KeplerMetrics:
         self.metrics["meta"].update(env_vars)
         print(f"Added environment variables to 'meta': {env_vars}")
 
-    def _get_f1_score(self):
+    def _set_f1_score(self):
         node_ip = self.get_node_ip()
 
         # Retrieve the best score from the Optuna database
@@ -156,7 +157,8 @@ class KeplerMetrics:
         best_trial = study.best_trial
         best_score = best_trial.value  # Best validation accuracy or F1 score 
 
-        return best_score
+
+        self.b_f1_Score = best_score
 
     def _calculate_total_energy(self, step_name, start_time, end_time, duration):
         """Calculate total energy metrics."""
@@ -389,7 +391,7 @@ class KeplerMetrics:
         # Aggregate total process time
             total_process_time += step_metrics['duration_seconds']
 
-        f1_score = self._get_f1_score()
+        f1_score = self.b_f1_Score
 
         # Update the total metrics in self.metrics
         self.metrics['total'] = {

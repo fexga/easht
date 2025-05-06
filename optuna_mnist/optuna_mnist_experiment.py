@@ -275,6 +275,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
 
     @KeplerMetrics.measure_power(aggregation_method='rate')
     def undeploy(self):
+        self._set_f1_score()
         """Delete all resources in the namespace and wait until they are gone."""
         config.load_kube_config()
         core_v1 = client.CoreV1Api()
@@ -366,7 +367,9 @@ def main():
         # Set Docker environment variables for Minikube
         build_docker_image("optuna-kubernetes-mlflow3:example")
         load_docker_image_into_kind("optuna-kubernetes-mlflow3:example")
+
         ob = OptunaBenchmark()
+
         runner = BenchmarkRunner(benchmark_cls=ob)
         validate_env_vars(REQUIRED_ENV_VARS)
         runner.run()
