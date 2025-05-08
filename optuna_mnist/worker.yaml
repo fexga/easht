@@ -12,14 +12,6 @@ spec:
         - name: wait-for-study
           image: optuna-kubernetes-mlflow3:example
           imagePullPolicy: IfNotPresent
-          command:
-          - /bin/sh
-          - -c
-          - -e
-          - -x
-          - |
-            until [ `sh check_study.sh` -eq 0 ];
-            do echo "waiting for study"; sleep 2; done;
           envFrom:
             - secretRef:
                 name: postgres-secrets

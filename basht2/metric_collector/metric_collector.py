@@ -9,13 +9,17 @@ from kubernetes import client, config
 import optuna
 
 
-class KeplerMetrics:
+class MetricCollector:
     def __init__(self, prometheus_url="http://localhost:9090/api/v1/query"):
         self.prometheus_url = prometheus_url
         self.metrics = {"steps": {}}
         self.timestamps = {}
         self.b_f1_Score = 0
-        load_dotenv(".env")
+        
+        env_file_path = os.path.join(os.getcwd(), ".env")
+        self.env_vars = dotenv_values(env_file_path)
+        print(f"Loaded .env file from: {env_file_path}")
+        print(f"Environment variables: {self.env_vars}")
         
     def measure_power(aggregation_method='sum'):
         def decorator(method):
@@ -69,6 +73,8 @@ class KeplerMetrics:
 
                 self._calculate_gpu_energy(step_name, start_time, end_time, duration)
 
+                self._calculate_network_metrics(step_name, start_time, end_time, duration)
+
              
             elif aggregation_method == 'rate':
                 # Calculate total energy metrics using rate
@@ -82,7 +88,9 @@ class KeplerMetrics:
 
                 self._calculate_gpu_rate(step_name, start_time, end_time, duration)
 
-            self._calculate_network_metrics(step_name, start_time, end_time, duration)
+                #self._calculate_network_metrics_rate(step_name, start_time, end_time, duration)
+
+            
 
         self._calculate_totals()
 
@@ -129,17 +137,21 @@ class KeplerMetrics:
         """
         Add all values from the .env file to the 'meta' field in the metrics.
         """
-        # Load all values from the .env file into a dictionary
-        env_file_path = os.path.join(os.path.dirname(__file__), ".env")
-        env_vars = dotenv_values(env_file_path)
 
         # Ensure the 'meta' field exists in the metrics
         if "meta" not in self.metrics:
             self.metrics["meta"] = {}
 
+        # List of environment variables to include in 'meta'
+        required_env_vars = ["BATCHSIZE", "EPOCHS", "PERCENT_VALID_EXAMPLES", "CLASSES"]
+
         # Add the environment variables to the 'meta' field
-        self.metrics["meta"].update(env_vars)
-        print(f"Added environment variables to 'meta': {env_vars}")
+        for var in required_env_vars:
+            value = os.getenv(var)
+            if value is not None:
+                self.metrics["meta"][var] = value
+
+        print(f"Added all environment variables to 'meta': {self.metrics['meta']}")
 
     def _set_f1_score(self):
         node_ip = self.get_node_ip()
@@ -328,6 +340,25 @@ class KeplerMetrics:
                 'network_transmit_bytes': transmit_packets
             })
             print(f"Network transmit bytes for {step_name}: {transmit_packets}")
+        elif start_transmit is None and end_transmit is not None:
+            transmit_packets = end_transmit - 0
+            self.metrics["steps"][step_name].update({
+                'network_transmit_bytes': transmit_packets
+            })
+            print(f"Network transmit bytes for {step_name}: {transmit_packets}")
+        elif start_transmit is None and end_transmit is None:
+            transmit_packets = 0
+            self.metrics["steps"][step_name].update({
+                'network_transmit_bytes': transmit_packets
+            })
+            print(f"Network transmit bytes for {step_name}: {transmit_packets}")
+
+        if start_receive is not None and end_receive is not None:
+            receive_packets = end_receive - start_receive
+            self.metrics["steps"][step_name].update({
+                'network_receive_bytes': receive_packets
+            })
+            print(f"Network receive bytes for {step_name}: {receive_packets}")
         elif start_receive is None and end_receive is not None:
             receive_packets = end_receive - 0
             self.metrics["steps"][step_name].update({
@@ -501,6 +532,33 @@ class KeplerMetrics:
                 'dram_energy_cf': gpu_cf
             })
 
+    #non-functional
+    def _calculate_network_metrics_rate(self, step_name, start_time, end_time, duration):
+        """Calculate network metrics (transmit and receive packets)."""
+        transmit = self._get_energy_rate_in_range('network_transmit', start_time, end_time, duration)
+        receive = self._get_energy_rate_in_range('network_receive', start_time, end_time, duration)
+    
+
+        if "steps" not in self.metrics:
+            self.metrics["steps"] = {}
+
+        if step_name not in self.metrics["steps"]:
+            self.metrics["steps"][step_name] = {'duration_seconds': duration}
+
+        if receive is not None:
+            receive_packets = receive * duration
+            self.metrics["steps"][step_name].update({
+                'network_receive_bytes': receive_packets
+            })
+            print(f"Network receive bytes for {step_name}: {receive_packets}")
+        elif transmit is not None:
+            transmit_packets = transmit * duration
+            self.metrics["steps"][step_name].update({
+                'network_transmit_bytes': transmit_packets
+            })
+            print(f"Network transmit bytes for {step_name}: {transmit_packets}")
+
+
     def _get_energy_at_timestamp(self, timestamp, energy_type='total'):
         """Query Prometheus for energy values at a specific timestamp"""
         try:
@@ -547,6 +605,10 @@ class KeplerMetrics:
                 query = f'rate(kepler_container_core_joules_total{{container_namespace="default"}}[{int(duration)}s])'
             elif energy_type == 'dram':
                 query = f'rate(kepler_container_dram_joules_total{{container_namespace="default"}}[{int(duration)}s])'
+            elif energy_type == 'network_transmit':
+                query = f'rate(container_network_transmit_bytes_total{{container_namespace="default"}}[{int(duration)}s])'
+            elif energy_type == 'network_receive':
+                query = f'rate(container_network_receive_bytes_total{{container_namespace="default"}}[{int(duration)}s])'
             elif energy_type == 'gpu':
                 query = f'rate(kepler_container_gpu_joules_total{{container_namespace="default"}}[{int(duration)}s])'
             else:

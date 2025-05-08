@@ -1,16 +1,7 @@
-import inspect
-import json
 import os
-import random
 from abc import ABC, abstractmethod
-from datetime import datetime
-from time import sleep
 from dotenv import load_dotenv
 
-import docker
-import numpy as np
-import torch
-import logging
 
 
 class Benchmark(ABC):
@@ -19,18 +10,6 @@ class Benchmark(ABC):
     subclass that is using the interface. Make sure to use the predefined static variables. Your benchmark
     will most likely not run properly if the variables value remains to be "None".
     """
-
-    # TODO: objective and grid are not allowed to be in the benchmark
-    resources = None
-
-    @abstractmethod
-    def deploy(self) -> None:
-        """
-            With the completion of this step the desired architecture of the HPO Framework should be running
-            on a platform, e.g,. in the case of Kubernetes it referes to the steps nassary to deploy all pods
-            and services in kubernetes.
-        """
-        pass
 
     @abstractmethod
     def setup(self):
@@ -49,7 +28,7 @@ class Benchmark(ABC):
         pass
 
     @abstractmethod
-    def undeploy(self):
+    def deprovision(self):
         # TODO: might be moved before collecting all metrics
         """
             The clean-up procedure to undeploy all components of the HPO Framework that were deployed in the
@@ -61,9 +40,7 @@ class Benchmark(ABC):
 class BenchmarkRunner():
 
     def __init__(
-            self, benchmark_cls: Benchmark,
-            #resources: dict,
-            name: str = "") -> None:
+            self, benchmark_cls: Benchmark) -> None:
         """
         This class runs a Benchmark.
         It is responsibile for setting up everything that is needed upfront to run the benchmark and manages
@@ -109,14 +86,10 @@ class BenchmarkRunner():
         Raises:
             ValueError: _description_
         """
-        benchmark_results = None
 
-
-        
-        self.benchmark.deploy()
         self.benchmark.setup()
         self.benchmark.run()
-        self.benchmark.undeploy()
+        self.benchmark.deprovision()
 
 
 def validate_env_vars(required_vars):

@@ -5,12 +5,12 @@ from kubernetes import client, config, utils, watch
 import yaml
 import subprocess
 import sys
-from kepler_metrics import KeplerMetrics
+from basht2.metric_collector.metric_collector import MetricCollector
 import time
 import optuna
-from dotenv import dotenv_values
+from dotenv import dotenv_values, load_dotenv
 
-from benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, validate_env_vars
+from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, validate_env_vars
 
 def build_docker_imageold():
     client = docker.from_env()
@@ -93,10 +93,10 @@ def create_configmap_from_env(env_file_path, configmap_name, namespace="default"
             print(f"Error creating ConfigMap: {e}")
 
 
-class OptunaBenchmark(Benchmark, KeplerMetrics):
+class OptunaBenchmark(Benchmark, MetricCollector):
 
     def __init__(self):
-        KeplerMetrics.__init__(self)  # Initialize the KeplerMetrics class
+        MetricCollector.__init__(self)  # Initialize the KeplerMetrics class
 
     def _wait_for_pods_ready(self, label_selector, target_phase):
         """
@@ -160,8 +160,9 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         finally:
             w.stop()
 
-    @KeplerMetrics.measure_power(aggregation_method='sum')
-    def deploy(self) -> None:
+
+    @MetricCollector.measure_power(aggregation_method='sum')
+    def setup(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
 
@@ -173,22 +174,6 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         self._wait_for_pods_ready("app=postgres", "Running")
         print("PostgreSQL deployment complete!")
 
-        # Load the PostgreSQL manifest
-        #with open("postgres-manifest.yaml") as f:
-        #    manifest = list(yaml.safe_load_all(f))
-
-        # Apply the manifest
-        # print("\nDeploying PostgreSQL to cluster\n")
-        #for m in manifest:
-        #    if m is not None:
-        #        utils.create_from_dict(k8s_client, m)
-        #    else:
-        #        print("Warning: Encountered a NoneType object in the manifest. Skipping.")
-
-    @KeplerMetrics.measure_power(aggregation_method='sum')
-    def setup(self):
-        config.load_kube_config()
-        k8s_client = client.ApiClient()
 
         # Wait for study-creator job to complete
 
@@ -214,7 +199,7 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         self._wait_for_pods_ready("job-name=study-creator", "Succeeded")
         print("Study setup complete!")
 
-    @KeplerMetrics.measure_power(aggregation_method='sum')
+    @MetricCollector.measure_power(aggregation_method='sum')
     def run(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
@@ -273,8 +258,8 @@ class OptunaBenchmark(Benchmark, KeplerMetrics):
         print(f"Training job monitoring completed after {elapsed:.1f} seconds")
         print(f"Completed pods: {len(completed_pods)}/{expected_completions}")
 
-    @KeplerMetrics.measure_power(aggregation_method='rate')
-    def undeploy(self):
+    @MetricCollector.measure_power(aggregation_method='rate')
+    def deprovision(self):
         self._set_f1_score()
         """Delete all resources in the namespace and wait until they are gone."""
         config.load_kube_config()
@@ -345,7 +330,7 @@ def main():
     
     # Set up port forwarding to Prometheus
     env_file_path = os.path.join(os.path.dirname(__file__), ".env")
-    
+    load_dotenv(env_file_path)
 
     # Create the ConfigMap from the .env file
     create_configmap_from_env(env_file_path, configmap_name="training-config")
@@ -372,6 +357,7 @@ def main():
 
         runner = BenchmarkRunner(benchmark_cls=ob)
         validate_env_vars(REQUIRED_ENV_VARS)
+
         runner.run()
 
         ob.calculate_energy_metrics()
