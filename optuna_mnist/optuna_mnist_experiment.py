@@ -199,7 +199,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         self._wait_for_pods_ready("job-name=study-creator", "Succeeded")
         print("Study setup complete!")
 
-    @MetricCollector.measure_power(aggregation_method='sum')
+    @MetricCollector.measure_power(aggregation_method='rate')
     def run(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()

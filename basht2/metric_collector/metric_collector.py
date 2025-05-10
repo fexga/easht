@@ -1,9 +1,8 @@
 import time
 import functools
-import pandas as pd
 import requests
 import json
-from dotenv import load_dotenv, dotenv_values
+from dotenv import dotenv_values
 import os
 from kubernetes import client, config
 import optuna
@@ -88,7 +87,7 @@ class MetricCollector:
 
                 self._calculate_gpu_rate(step_name, start_time, end_time, duration)
 
-                #self._calculate_network_metrics_rate(step_name, start_time, end_time, duration)
+                self._calculate_network_metrics_rate(step_name, start_time, end_time, duration)
 
             
 
@@ -111,27 +110,26 @@ class MetricCollector:
         epochs = int(os.getenv("EPOCHS"))  # Default to 1 if not set
 
         # Ensure the 'run' step metrics exist
-        if "total_energy_joules" in self.metrics["steps"]["run"]:
-            total_energy_joules = self.metrics["steps"]["run"]["total_energy_joules"]
+        if "total_energy_kwh" in self.metrics["steps"]["run"]:
+            total_kwh = self.metrics["steps"]["run"]["total_energy_kwh"]
             total_energy_cf = self.metrics["steps"]["run"]["total_energy_cf"]
 
             # Calculate adjusted energy
-            energy_per_1000epochs = (1000 / epochs) * total_energy_joules
+            energy_per_1000epochs = (1000 / epochs) * total_kwh
             cf_per_1000epochs = (1000 / epochs) * total_energy_cf
 
             if "total" not in self.metrics:
                 self.metrics["total"] = {}
 
             self.metrics["total"].update({
-                "epochs": epochs,
-                "adjusted_energy_joules": energy_per_1000epochs,
-                "adjusted_carbon_footprint": cf_per_1000epochs
+                "kwh_1000epochs": energy_per_1000epochs,
+                "carbon_footprint_1000epochs_g": cf_per_1000epochs
             })
 
-            print(f"Adjusted energy saved in 'meta': {energy_per_1000epochs:.2f} joules")
-            print(f"Adjusted carbon footprint saved in 'meta': {cf_per_1000epochs:.4f} kgCO2e")
+            print(f"kwh_1000epochs saved in 'meta': {energy_per_1000epochs:.2f} joules")
+            print(f"carbon_footprint_1000epochs saved in 'meta': {cf_per_1000epochs:.4f} kgCO2e")
         else:
-            print("Metrics for 'run' step or 'total_energy_joules' not found.")
+            print("Metrics for 'run' step or 'total_energy_kwh' not found.")
 
     def _add_env_to_meta(self):
         """
@@ -203,7 +201,6 @@ class MetricCollector:
             total_cf = 0
 
         self.metrics["steps"][step_name].update({
-            'total_energy_joules': energy_consumed,
             'avg_power_watts': avg_power,
             'total_energy_kwh': total_kwh,
             'total_energy_cf': total_cf
@@ -241,7 +238,6 @@ class MetricCollector:
             cpu_cf = 0
 
         self.metrics["steps"][step_name].update({
-            'cpu_energy_joules': cpu_energy,
             'avg_cpu_power_watts': avg_cpu_power,
             'cpu_energy_kwh': cpu_kwh,
             'cpu_energy_cf': cpu_cf
@@ -279,7 +275,6 @@ class MetricCollector:
             dram_cf = 0
 
         self.metrics["steps"][step_name].update({
-            'dram_energy_joules': dram_energy,
             'avg_dram_power_watts': avg_dram_power,
             'dram_energy_kwh': dram_kwh,
             'dram_energy_cf': dram_cf
@@ -311,7 +306,7 @@ class MetricCollector:
             gpu_cf = 0
 
         self.metrics["steps"][step_name].update({
-            'gpu_energy_joules': gpu_energy,
+            #'gpu_energy_joules': gpu_energy,
             'avg_gpu_power_watts': avg_gpu_power,
             'gpu_energy_kwh': gpu_kwh,
             'gpu_energy_cf': gpu_cf
@@ -386,9 +381,6 @@ class MetricCollector:
 
     def _calculate_totals(self):
         """Calculate total values for energy, power, and carbon footprint."""
-        total_process_joules = 0
-        total_cpu_joules = 0
-        total_dram_joules = 0
 
         total_process_time = 0
 
@@ -402,22 +394,30 @@ class MetricCollector:
     
         for step_name, step_metrics in self.metrics.get("steps", {}).items():
             # Aggregate total energy metrics
-            if 'total_energy_joules' in step_metrics:
-                total_process_joules += step_metrics['total_energy_joules']
-                total_process_kwh += step_metrics['total_energy_kwh']
-                total_process_cf += step_metrics['total_energy_cf']
+            print(f"Calculating totals for {step_name}...")
+            total_process_kwh += step_metrics['total_energy_kwh']
+            total_process_cf += step_metrics['total_energy_cf']
 
             # Aggregate CPU energy metrics
-            if 'cpu_energy_joules' in step_metrics:
-                total_cpu_joules += step_metrics['cpu_energy_joules']
-                total_cpu_kwh += step_metrics['cpu_energy_kwh']
-                total_cpu_cf += step_metrics['cpu_energy_cf']
+            total_cpu_kwh += step_metrics['cpu_energy_kwh']
+            total_cpu_cf += step_metrics['cpu_energy_cf']
 
             # Aggregate DRAM energy metrics
-            if 'dram_energy_joules' in step_metrics:
-                total_dram_joules += step_metrics['dram_energy_joules']
-                total_dram_kwh += step_metrics['dram_energy_kwh']
-                total_dram_cf += step_metrics['dram_energy_cf']
+            total_dram_kwh += step_metrics['dram_energy_kwh']
+            total_dram_cf += step_metrics['dram_energy_cf']
+
+            # Aggregate GPU energy metrics 
+            total_dram_kwh += step_metrics['gpu_energy_kwh']
+            total_dram_cf += step_metrics['gpu_energy_cf']
+
+            # Aggregate network metrics
+            total_process_kwh += step_metrics['network_transmit_bytes']
+            total_process_cf += step_metrics['network_transmit_bytes'] * self._get_carbon_intensity()
+
+            total_process_kwh += step_metrics['network_receive_bytes']
+            total_process_cf += step_metrics['network_receive_bytes'] * self._get_carbon_intensity()
+
+
 
         # Aggregate total process time
             total_process_time += step_metrics['duration_seconds']
@@ -427,16 +427,10 @@ class MetricCollector:
         # Update the total metrics in self.metrics
         self.metrics['total'] = {
             'duration_seconds': total_process_time,
-            'total_energy_joules': total_process_joules,
-            'avg_power_watts': total_process_joules / total_process_time if total_process_time > 0 else 0,
             'total_energy_kwh': total_process_kwh,
             'total_energy_cf': total_process_cf,
-            'cpu_energy_joules': total_cpu_joules,
-            'avg_cpu_power_watts': total_cpu_joules / total_process_time if total_process_time > 0 else 0,
             'cpu_energy_kwh': total_cpu_kwh,
             'cpu_energy_cf': total_cpu_cf,
-            'dram_energy_joules': total_dram_joules,
-            'avg_dram_power_watts': total_dram_joules / total_process_time if total_process_time > 0 else 0,
             'dram_energy_kwh': total_dram_kwh,
             'dram_energy_cf': total_dram_cf,
             'f1_score': f1_score
@@ -459,12 +453,16 @@ class MetricCollector:
             total_kwh = self.watts_to_kwh(total_rate, duration)
             carbon_intensity = self._get_carbon_intensity()
             total_cf = total_kwh * carbon_intensity
+        else:
+            total_rate = 0
+            total_kwh = 0
+            total_cf = 0 
 
-            self.metrics["steps"][step_name].update({
-                'total_energy_rate': total_rate,
-                'total_energy_kwh': total_kwh,
-                'total_energy_cf': total_cf
-            })
+        self.metrics["steps"][step_name].update({
+            'total_energy_rate': total_rate,
+            'total_energy_kwh': total_kwh,
+            'total_energy_cf': total_cf
+        })
 
     def _calculate_cpu_rate(self, step_name, start_time, end_time, duration):
         """Calculate CPU energy metrics using the rate function over a time range."""
@@ -481,12 +479,16 @@ class MetricCollector:
             cpu_kwh = self.watts_to_kwh(cpu_rate, duration)
             carbon_intensity = self._get_carbon_intensity()
             cpu_cf = cpu_kwh * carbon_intensity
+        else:
+            cpu_rate = 0
+            cpu_kwh = 0
+            cpu_cf = 0
 
-            self.metrics["steps"][step_name].update({
-                'cpu_energy_rate': cpu_rate,
-                'cpu_energy_kwh': cpu_kwh,
-                'cpu_energy_cf': cpu_cf
-            })
+        self.metrics["steps"][step_name].update({
+            'avg_cpu_power_watts': cpu_rate,
+            'cpu_energy_kwh': cpu_kwh,
+            'cpu_energy_cf': cpu_cf
+        })
 
     def _calculate_dram_rate(self, step_name, start_time, end_time, duration):
         """Calculate DRAM energy metrics using the rate function over a time range."""
@@ -503,12 +505,16 @@ class MetricCollector:
             dram_kwh = self.watts_to_kwh(dram_rate, duration)
             carbon_intensity = self._get_carbon_intensity()
             dram_cf = dram_kwh * carbon_intensity
+        else:
+            dram_rate = 0
+            dram_kwh = 0
+            dram_cf = 0
     
-            self.metrics["steps"][step_name].update({
-                'dram_energy_rate': dram_rate,
-                'dram_energy_kwh': dram_kwh,
-                'dram_energy_cf': dram_cf
-            })
+        self.metrics["steps"][step_name].update({
+            'avg_dram_power_watts': dram_rate,
+            'dram_energy_kwh': dram_kwh,
+            'dram_energy_cf': dram_cf
+        })
     
     def _calculate_gpu_rate(self, step_name, start_time, end_time, duration):
         """Calculate DRAM energy metrics using the rate function over a time range."""
@@ -525,12 +531,16 @@ class MetricCollector:
             gpu_kwh = self.watts_to_kwh(gpu_rate, duration)
             carbon_intensity = self._get_carbon_intensity()
             gpu_cf = gpu_kwh * carbon_intensity
+        else:
+            gpu_rate = 0
+            gpu_kwh = 0
+            gpu_cf = 0
     
-            self.metrics["steps"][step_name].update({
-                'dram_energy_rate': gpu_rate,
-                'dram_energy_kwh': gpu_kwh,
-                'dram_energy_cf': gpu_cf
-            })
+        self.metrics["steps"][step_name].update({
+            'avg_gpu_power_watts': gpu_rate,
+            'gpu_energy_kwh': gpu_kwh,
+            'gpu_energy_cf': gpu_cf
+        })
 
     #non-functional
     def _calculate_network_metrics_rate(self, step_name, start_time, end_time, duration):
@@ -551,8 +561,21 @@ class MetricCollector:
                 'network_receive_bytes': receive_packets
             })
             print(f"Network receive bytes for {step_name}: {receive_packets}")
-        elif transmit is not None:
+        else:
+            receive_packets = 0
+            self.metrics["steps"][step_name].update({
+                'network_receive_bytes': receive_packets
+            })
+            print(f"Network receive bytes for {step_name}: {receive_packets}")
+        
+        if transmit is not None:
             transmit_packets = transmit * duration
+            self.metrics["steps"][step_name].update({
+                'network_transmit_bytes': transmit_packets
+            })
+            print(f"Network transmit bytes for {step_name}: {transmit_packets}")
+        else:
+            transmit_packets = 0
             self.metrics["steps"][step_name].update({
                 'network_transmit_bytes': transmit_packets
             })
@@ -570,9 +593,9 @@ class MetricCollector:
             elif energy_type == 'dram':
                 query = 'sum(kepler_container_dram_joules_total{container_namespace="default"})'
             elif energy_type == 'network_transmit':
-                query = 'sum(container_network_transmit_bytes_total{namespace="default"})'
+                query = 'sum(container_network_transmit_bytes_total{container_namespace="default"})'
             elif energy_type == 'network_receive':
-                query = 'sum(container_network_receive_bytes_total{namespace="default"})'
+                query = 'sum(container_network_receive_bytes_total{container_namespace="default"})'
             elif energy_type == 'gpu':
                 query = 'sum(kepler_container_gpu_joules_total{container_namespace="default"})'
             else:
@@ -684,14 +707,19 @@ class MetricCollector:
         # Convert watts to kilowatts and calculate kWh
         return (watts / 1000) * duration_hours
     
-    def _get_carbon_intensity(self):
+    def _get_carbon_intensity(self, zone="AE"):
         """Fetch the carbon intensity from the API."""
         url = "https://api.electricitymap.org/v3/carbon-intensity/latest"
         headers = {"auth-token": "dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph"}
-        params = {"zone": "AE"}
+        params = {"zone": zone}
 
         response = requests.get(url, headers=headers, params=params)
         data = response.json()
+
+        if "meta" not in self.metrics:
+            self.metrics["meta"] = {}
+        self.metrics["meta"]["carbon_intensity_zone"] = zone
+
         return data.get("carbonIntensity")
     
     def get_node_ip(self):
