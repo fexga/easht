@@ -6,6 +6,7 @@ from dotenv import dotenv_values
 import os
 from kubernetes import client, config
 import optuna
+import subprocess
 
 
 class MetricCollector:
@@ -75,19 +76,19 @@ class MetricCollector:
                 self._calculate_network_metrics(step_name, start_time, end_time, duration)
 
              
-            elif aggregation_method == 'rate':
+            elif aggregation_method == 'increase':
                 # Calculate total energy metrics using rate
-                self._calculate_total_rate(step_name, start_time, end_time, duration)
+                self._calculate_total_increase(step_name, start_time, end_time, duration)
 
                 # Calculate CPU energy metrics using rate
-                self._calculate_cpu_rate(step_name, start_time, end_time, duration)
+                self._calculate_cpu_increase(step_name, start_time, end_time, duration)
 
                 # Calculate DRAM energy metrics using rate
-                self._calculate_dram_rate(step_name, start_time, end_time, duration)
+                self._calculate_dram_increase(step_name, start_time, end_time, duration)
 
-                self._calculate_gpu_rate(step_name, start_time, end_time, duration)
+                self._calculate_gpu_increase(step_name, start_time, end_time, duration)
 
-                self._calculate_network_metrics_rate(step_name, start_time, end_time, duration)
+                self._calculate_network_metrics_increase(step_name, start_time, end_time, duration)
 
             
 
@@ -98,6 +99,8 @@ class MetricCollector:
         self._add_env_to_meta()
 
         self._add_hardware_info_to_meta()
+
+        self.calculate_overall_metrics()
 
 
         
@@ -387,10 +390,14 @@ class MetricCollector:
         total_process_kwh = 0
         total_cpu_kwh = 0
         total_dram_kwh = 0
+        total_gpu_kwh = 0
+        total_transmit_kwh = 0
+        total_receive_kwh = 0
 
         total_process_cf = 0
         total_cpu_cf = 0
         total_dram_cf = 0
+        total_gpu_cf = 0
     
         for step_name, step_metrics in self.metrics.get("steps", {}).items():
             # Aggregate total energy metrics
@@ -407,15 +414,14 @@ class MetricCollector:
             total_dram_cf += step_metrics['dram_energy_cf']
 
             # Aggregate GPU energy metrics 
-            total_dram_kwh += step_metrics['gpu_energy_kwh']
-            total_dram_cf += step_metrics['gpu_energy_cf']
+            total_gpu_kwh += step_metrics['gpu_energy_kwh']
+            total_gpu_cf += step_metrics['gpu_energy_cf']
 
             # Aggregate network metrics
-            total_process_kwh += step_metrics['network_transmit_bytes']
-            total_process_cf += step_metrics['network_transmit_bytes'] * self._get_carbon_intensity()
+            total_transmit_kwh += step_metrics['network_transmit_bytes']
 
-            total_process_kwh += step_metrics['network_receive_bytes']
-            total_process_cf += step_metrics['network_receive_bytes'] * self._get_carbon_intensity()
+            total_receive_kwh += step_metrics['network_receive_bytes']
+
 
 
 
@@ -438,6 +444,151 @@ class MetricCollector:
 
         print(f"Total metrics calculated: {self.metrics['total']}")
 
+    def _calculate_total_increase(self, step_name, start_time, end_time, duration):
+        """Calculate total energy metrics using the rate function over a time range."""
+        total_increase = self._get_energy_increase_at_timestamp('total', start_time, end_time, duration)
+
+        if "steps" not in self.metrics:
+            self.metrics["steps"] = {}
+
+        if step_name not in self.metrics["steps"]:
+            self.metrics["steps"][step_name] = {'duration_seconds': duration}
+
+        if total_increase is not None:
+            avg_power = total_increase / duration if duration > 0 else 0
+            total_kwh = self.joules_to_kwh(total_increase)
+            carbon_intensity = self._get_carbon_intensity()
+            total_cf = total_kwh * carbon_intensity
+        else:
+            avg_power = 0
+            total_kwh = 0
+            total_cf = 0 
+
+
+        self.metrics["steps"][step_name].update({
+            'avg_power_watts': avg_power,
+            'total_energy_kwh': total_kwh,
+            'total_energy_cf': total_cf
+        })
+
+    def _calculate_cpu_increase(self, step_name, start_time, end_time, duration):
+        """Calculate CPU energy metrics using the rate function over a time range."""
+        cpu_increase = self._get_energy_increase_at_timestamp('cpu', start_time, end_time, duration)
+
+        if "steps" not in self.metrics:
+            self.metrics["steps"] = {}
+
+        if step_name not in self.metrics["steps"]:
+            self.metrics["steps"][step_name] = {'duration_seconds': duration}
+
+        if cpu_increase is not None:
+            avg_power = cpu_increase / duration if duration > 0 else 0
+            cpu_kwh = self.joules_to_kwh(cpu_increase)
+            carbon_intensity = self._get_carbon_intensity()
+            cpu_cf = cpu_kwh * carbon_intensity
+        else:
+            avg_power = 0
+            cpu_kwh = 0
+            cpu_cf = 0
+
+        self.metrics["steps"][step_name].update({
+            'avg_cpu_power_watts': avg_power,
+            'cpu_energy_kwh': cpu_kwh,
+            'cpu_energy_cf': cpu_cf
+        })
+
+    def _calculate_dram_increase(self, step_name, start_time, end_time, duration):
+        """Calculate DRAM energy metrics using the rate function over a time range."""
+        dram_increase = self._get_energy_rate_in_range('dram', start_time, end_time, duration)
+
+        if "steps" not in self.metrics:
+            self.metrics["steps"] = {}
+    
+        if step_name not in self.metrics["steps"]:
+            self.metrics["steps"][step_name] = {'duration_seconds': duration}
+    
+        if dram_increase is not None:
+            avg_power = dram_increase / duration if duration > 0 else 0
+            dram_kwh = self.joules_to_kwh(dram_increase)
+            carbon_intensity = self._get_carbon_intensity()
+            dram_cf = dram_kwh * carbon_intensity
+        else:
+            avg_power = 0
+            dram_kwh = 0
+            dram_cf = 0
+    
+        self.metrics["steps"][step_name].update({
+            'avg_dram_power_watts': avg_power,
+            'dram_energy_kwh': dram_kwh,
+            'dram_energy_cf': dram_cf
+        })
+    
+    def _calculate_gpu_increase(self, step_name, start_time, end_time, duration):
+        """Calculate DRAM energy metrics using the rate function over a time range."""
+        gpu_increase = self._get_energy_rate_in_range('gpu', start_time, end_time, duration)
+
+        if "steps" not in self.metrics:
+            self.metrics["steps"] = {}
+    
+        if step_name not in self.metrics["steps"]:
+            self.metrics["steps"][step_name] = {'duration_seconds': duration}
+    
+        if gpu_increase is not None:
+            avg_power = gpu_increase / duration if duration > 0 else 0
+            gpu_kwh = self.joules_to_kwh(gpu_increase)
+            carbon_intensity = self._get_carbon_intensity()
+            gpu_cf = gpu_kwh * carbon_intensity
+        else:
+            avg_power = 0
+            gpu_kwh = 0
+            gpu_cf = 0
+    
+        self.metrics["steps"][step_name].update({
+            'avg_gpu_power_watts': avg_power,
+            'gpu_energy_kwh': gpu_kwh,
+            'gpu_energy_cf': gpu_cf
+        })
+
+    #non-functional
+    def _calculate_network_metrics_increase(self, step_name, start_time, end_time, duration):
+        """Calculate network metrics (transmit and receive packets)."""
+        transmit = self._get_energy_increase_at_timestamp('network_transmit', start_time, end_time, duration)
+        receive = self._get_energy_increase_at_timestamp('network_receive', start_time, end_time, duration)
+    
+
+        if "steps" not in self.metrics:
+            self.metrics["steps"] = {}
+
+        if step_name not in self.metrics["steps"]:
+            self.metrics["steps"][step_name] = {'duration_seconds': duration}
+
+        if receive is not None:
+            receive_packets = receive
+            self.metrics["steps"][step_name].update({
+                'network_receive_bytes': receive_packets
+            })
+            print(f"Network receive bytes for {step_name}: {receive_packets}")
+        else:
+            receive_packets = 0
+            self.metrics["steps"][step_name].update({
+                'network_receive_bytes': receive_packets
+            })
+            print(f"Network receive bytes for {step_name}: {receive_packets}")
+        
+        if transmit is not None:
+            transmit_packets = transmit
+            self.metrics["steps"][step_name].update({
+                'network_transmit_bytes': transmit_packets
+            })
+            print(f"Network transmit bytes for {step_name}: {transmit_packets}")
+        else:
+            transmit_packets = 0
+            self.metrics["steps"][step_name].update({
+                'network_transmit_bytes': transmit_packets
+            })
+            print(f"Network transmit bytes for {step_name}: {transmit_packets}")
+
+    '''
     def _calculate_total_rate(self, step_name, start_time, end_time, duration):
         """Calculate total energy metrics using the rate function over a time range."""
         total_rate = self._get_energy_rate_in_range('total', start_time, end_time, duration)
@@ -580,7 +731,7 @@ class MetricCollector:
                 'network_transmit_bytes': transmit_packets
             })
             print(f"Network transmit bytes for {step_name}: {transmit_packets}")
-
+    '''
 
     def _get_energy_at_timestamp(self, timestamp, energy_type='total'):
         """Query Prometheus for energy values at a specific timestamp"""
@@ -616,6 +767,43 @@ class MetricCollector:
             
         except Exception as e:
             print(f"Error querying Prometheus for {energy_type} energy at timestamp {timestamp}: {e}")
+            return None
+        
+    def _get_energy_increase_at_timestamp(self, energy_type, start_time, end_time, duration):
+        """Query Prometheus for energy values at a specific timestamp"""
+        try:
+            # Determine query based on energy type
+            if energy_type == 'total':
+                query = f'increase(kepler_container_joules_total{{container_namespace="default"}}[{int(duration)}s])'
+            elif energy_type == 'cpu':
+                query = f'increase(kepler_container_core_joules_total{{container_namespace="default"}}[{int(duration)}s])'
+            elif energy_type == 'dram':
+                query = f'increase(kepler_container_dram_joules_total{{container_namespace="default"}}[{int(duration)}s])'
+            elif energy_type == 'network_transmit':
+                query = f'increase(container_network_transmit_bytes_total{{namespace="default"}}[{int(duration)}s])'
+            elif energy_type == 'network_receive':
+                query = f'increase(container_network_receive_bytes_total{{namespace="default"}}[{int(duration)}s])'
+            elif energy_type == 'gpu':
+                query = f'increase(kepler_container_gpu_joules_total{{container_namespace="default"}}[{int(duration)}s])'
+            else:
+                raise ValueError(f"Unknown energy type: {energy_type}")
+            
+            # Query Prometheus with timestamp
+            response = requests.get(
+                self.prometheus_url, 
+                params={'query': query, 'time': end_time}
+            )
+            result = response.json()
+            
+            # Extract value
+            if 'data' in result and 'result' in result['data'] and result['data']['result']:
+                total_joules = sum(float(series['value'][1]) for series in result['data']['result'])
+                print(f"Total Joules over {duration}s: {total_joules}")
+                return total_joules
+            return None
+            
+        except Exception as e:
+            print(f"Error querying Prometheus for {energy_type} energy")
             return None
         
     def _get_energy_rate_in_range(self, energy_type, start_time, end_time, duration):
@@ -659,6 +847,70 @@ class MetricCollector:
         except Exception as e:
             print(f"Error querying Prometheus for {energy_type} rate in range: {e}")
             return None
+    
+    def calculate_overall_metrics(self):
+        """Calculate overall metrics for the entire experiment duration using the increase method."""
+        if not self.timestamps:
+            print("No step timestamps found.")
+            return
+
+        # Get the first and last step by sorted start/end times
+        steps = list(self.timestamps.items())
+        steps_sorted_by_start = sorted(steps, key=lambda x: x[1]['start_time'])
+        steps_sorted_by_end = sorted(steps, key=lambda x: x[1]['end_time'])
+
+        start_time = steps_sorted_by_start[0][1]['start_time']
+        end_time = steps_sorted_by_end[-1][1]['end_time']
+        duration = end_time - start_time
+
+        print(f"Calculating overall metrics (increase) from {start_time} to {end_time} (duration: {duration:.2f}s)")
+
+        # Query increases for all metrics
+        total_joules = self._get_energy_increase_at_timestamp('total', start_time, end_time, duration)
+        cpu_joules = self._get_energy_increase_at_timestamp('cpu', start_time, end_time, duration)
+        dram_joules = self._get_energy_increase_at_timestamp('dram', start_time, end_time, duration)
+        gpu_joules = self._get_energy_increase_at_timestamp('gpu', start_time, end_time, duration)
+        tx_bytes = self._get_energy_increase_at_timestamp('network_transmit', start_time, end_time, duration)
+        rx_bytes = self._get_energy_increase_at_timestamp('network_receive', start_time, end_time, duration)
+
+        # Averages
+        avg_power = total_joules / duration if (duration > 0 and total_joules is not None) else 0
+        avg_cpu_power = cpu_joules / duration if (duration > 0 and cpu_joules is not None) else 0
+        avg_dram_power = dram_joules / duration if (duration > 0 and dram_joules is not None) else 0
+        avg_gpu_power = gpu_joules / duration if (duration > 0 and gpu_joules is not None) else 0
+
+        # Convert to kWh
+        total_kwh = self.joules_to_kwh(total_joules) if total_joules is not None else 0
+        cpu_kwh = self.joules_to_kwh(cpu_joules) if cpu_joules is not None else 0
+        dram_kwh = self.joules_to_kwh(dram_joules) if dram_joules is not None else 0
+        gpu_kwh = self.joules_to_kwh(gpu_joules) if gpu_joules is not None else 0
+
+        # Carbon intensity
+        carbon_intensity = self._get_carbon_intensity()
+        total_cf = total_kwh * carbon_intensity
+        cpu_cf = cpu_kwh * carbon_intensity
+        dram_cf = dram_kwh * carbon_intensity
+        gpu_cf = gpu_kwh * carbon_intensity
+
+        # Store in metrics["overall_increase"]
+        self.metrics["overall_increase"] = {
+            "duration_seconds": duration,
+            "total_energy_kwh": total_kwh,
+            "total_energy_cf": total_cf,
+            "avg_power_watts": avg_power,
+            "cpu_energy_kwh": cpu_kwh,
+            "cpu_energy_cf": cpu_cf,
+            "avg_cpu_power_watts": avg_cpu_power,
+            "dram_energy_kwh": dram_kwh,
+            "dram_energy_cf": dram_cf,
+            "avg_dram_power_watts": avg_dram_power,
+            "gpu_energy_kwh": gpu_kwh,
+            "gpu_energy_cf": gpu_cf,
+            "avg_gpu_power_watts": avg_gpu_power,
+            "network_transmit_bytes": tx_bytes if tx_bytes is not None else 0,
+            "network_receive_bytes": rx_bytes if rx_bytes is not None else 0
+        }
+        print(f"Overall metrics (increase): {self.metrics['overall_increase']}")
         
     def _add_hardware_info_to_meta(self):
         """
@@ -747,3 +999,45 @@ class MetricCollector:
         # If no IP is found, raise an exception
         raise RuntimeError("No node with an ExternalIP or InternalIP found in the cluster.")
     
+
+    def save_prometheus_snapshot_locally(self, local_dir="prometheus_snapshots", namespace="monitoring", prometheus_pod_label="app.kubernetes.io/name=prometheus"):
+        """
+        Trigger a Prometheus snapshot and copy it locally using kubectl cp.
+        Requires Prometheus to be started with --web.enable-admin-api.
+        """
+        # 1. Trigger snapshot
+        url = self.prometheus_url.replace("/api/v1/query", "/api/v1/admin/tsdb/snapshot")
+        try:
+            response = requests.post(url)
+            response.raise_for_status()
+            data = response.json()
+            snapshot_name = data["data"]["name"]
+            print(f"Prometheus snapshot created: {snapshot_name}")
+        except Exception as e:
+            print(f"Error creating Prometheus snapshot: {e}")
+            return
+
+        # 2. Find the Prometheus pod name
+        try:
+            pods = subprocess.check_output([
+                "kubectl", "get", "pods", "-n", namespace, "-l", prometheus_pod_label, "-o", "jsonpath={.items[0].metadata.name}"
+            ]).decode().strip()
+            prometheus_pod = pods
+            print(f"Prometheus pod: {prometheus_pod}")
+        except Exception as e:
+            print(f"Error finding Prometheus pod: {e}")
+            return
+
+        # 3. Copy the snapshot directory from the pod to local_dir
+        remote_path = f"/prometheus/snapshots/{snapshot_name}"
+        local_path = os.path.join(local_dir, snapshot_name)
+        os.makedirs(local_dir, exist_ok=True)
+        try:
+            subprocess.check_call([
+                "kubectl", "cp",
+                f"{namespace}/{prometheus_pod}:{remote_path}",
+                local_path
+            ])
+            print(f"Snapshot copied to {local_path}")
+        except Exception as e:
+            print(f"Error copying snapshot: {e}")

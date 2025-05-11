@@ -161,7 +161,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
             w.stop()
 
 
-    @MetricCollector.measure_power(aggregation_method='sum')
+    @MetricCollector.measure_power(aggregation_method='increase')
     def setup(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
@@ -199,7 +199,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         self._wait_for_pods_ready("job-name=study-creator", "Succeeded")
         print("Study setup complete!")
 
-    @MetricCollector.measure_power(aggregation_method='rate')
+    @MetricCollector.measure_power(aggregation_method='increase')
     def run(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
@@ -258,7 +258,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         print(f"Training job monitoring completed after {elapsed:.1f} seconds")
         print(f"Completed pods: {len(completed_pods)}/{expected_completions}")
 
-    @MetricCollector.measure_power(aggregation_method='rate')
+    @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):
         self._set_f1_score()
         """Delete all resources in the namespace and wait until they are gone."""
@@ -364,6 +364,8 @@ def main():
 
         # Save metrics with the best score
         ob.save_metrics("optuna_mnist_resource_metrics.json")
+
+        ob.save_prometheus_snapshot_locally()
     
 
     finally:
