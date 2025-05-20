@@ -92,6 +92,17 @@ def create_configmap_from_env(env_file_path, configmap_name, namespace="default"
         else:
             print(f"Error creating ConfigMap: {e}")
 
+def generate_worker_yaml_from_env(env_path, template_path, output_path):
+    env = dotenv_values(env_path)
+    parallelism = env.get("PARALLELISM", "3")  # Default to 3 if not set
+
+    with open(template_path) as f:
+        content = f.read()
+
+    content = content.replace("{{PARALLELISM}}", str(parallelism))
+
+    with open(output_path, "w") as f:
+        f.write(content)
 
 class OptunaBenchmark(Benchmark, MetricCollector):
 
@@ -331,6 +342,10 @@ def main():
     # Set up port forwarding to Prometheus
     env_file_path = os.path.join(os.path.dirname(__file__), ".env")
     load_dotenv(env_file_path)
+
+    worker_template_path = os.path.join(os.path.dirname(__file__), "worker.yaml.template")
+    worker_yaml_path = os.path.join(os.path.dirname(__file__), "worker.yaml")
+    generate_worker_yaml_from_env(env_file_path, worker_template_path, worker_yaml_path)
 
     # Create the ConfigMap from the .env file
     create_configmap_from_env(env_file_path, configmap_name="training-config")
