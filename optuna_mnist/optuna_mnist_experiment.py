@@ -12,6 +12,12 @@ from dotenv import dotenv_values, load_dotenv
 
 from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, validate_env_vars
 
+import socket
+
+def is_port_open(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex((host, port)) == 0
+
 def build_docker_imageold():
     client = docker.from_env()
     print(f"Building Docker Image optuna-kubernetes-mlflow3:example")
@@ -109,7 +115,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
     def __init__(self):
         MetricCollector.__init__(self)  # Initialize the KeplerMetrics class
 
-    def _wait_for_pods_ready(self, label_selector, target_phase):
+    def _wait_for_pod_ready(self, label_selector, target_phase, namespace_name):
         """
         Wait for pods matching the label selector to reach the target phase.
 
@@ -120,6 +126,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         """
         config.load_kube_config()
         core_v1 = client.CoreV1Api()
+        
 
         start_time = time.time()
 
@@ -130,7 +137,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         try:
             for event in w.stream(
                 core_v1.list_namespaced_pod,
-                namespace="default",
+                namespace=namespace_name,
                 label_selector=label_selector,
             ):
                 pod = event['object']
@@ -171,6 +178,65 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         finally:
             w.stop()
 
+    def _wait_for_pods_ready(self, label_selector, number_jobs, namespace_name, target_phase):
+        """
+        Wait for pods matching the label selector to reach the target phase.
+
+        Args:
+            label_selector (str): Kubernetes label selector
+            target_phase (str): Target pod phase ('Running', 'Succeeded', etc)
+            timeout (int): Maximum time to wait in seconds
+        """
+        config.load_kube_config()
+        core_v1 = client.CoreV1Api()
+        batch_v1 = client.BatchV1Api()
+
+        # Get the job to determine expected completions
+        #job = batch_v1.read_namespaced_job(name=label_selector, namespace=namespace_name)
+        #expected_completions = job.spec.completions or 5
+        expected_completions = number_jobs
+        print(f"Job expects {expected_completions} completions")
+
+        # Set up monitoring
+        completed_pods = set()
+        start_time = time.time()
+
+        # Create a watch for pod status changes
+        w = watch.Watch()
+
+        try:
+            # Watch for pod status changes
+            for event in w.stream(
+                core_v1.list_namespaced_pod,
+                namespace="default",
+                label_selector=label_selector,
+            ):
+                pod = event['object']
+                pod_name = pod.metadata.name
+
+                # If the pod succeeded and we haven't counted it yet
+                if pod_name not in completed_pods and pod.status.phase == target_phase:
+                    completed_pods.add(pod_name)
+                    print(f"Pod {pod_name} completed successfully ({len(completed_pods)}/{expected_completions})")
+
+                    # If all expected pods are complete, we're done
+                    if len(completed_pods) >= expected_completions:
+                        print("All worker pods have completed successfully!")
+                        w.stop()
+                        break
+                
+
+        except Exception as e:
+            print(f"Error watching pods: {e}")
+        finally:
+            # Make sure we stop the watch
+            w.stop()
+
+        # Final status report
+        elapsed = time.time() - start_time
+        print(f"Training job monitoring completed after {elapsed:.1f} seconds")
+        print(f"Completed pods: {len(completed_pods)}/{expected_completions}")
+
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def setup(self):
@@ -182,7 +248,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
         # Wait for PostgreSQL pod to be running
         print("Waiting for PostgreSQL pods to be ready...")
-        self._wait_for_pods_ready("app=postgres", "Running")
+        self._wait_for_pod_ready("app=postgres", "Running", "default")
         print("PostgreSQL deployment complete!")
 
 
@@ -207,7 +273,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         #    else:
         #        print("Warning: Encountered a NoneType object in the manifest. Skipping.")
         print("Waiting for study-creator job to complete...")
-        self._wait_for_pods_ready("job-name=study-creator", "Succeeded")
+        self._wait_for_pod_ready(label_selector="job-name=study-creator", target_phase="Succeeded", namespace_name="default")
         print("Study setup complete!")
 
     @MetricCollector.measure_power(aggregation_method='increase')
@@ -217,57 +283,17 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         core_v1 = client.CoreV1Api()
         batch_v1 = client.BatchV1Api()
 
+        env_path = os.path.join(os.path.dirname(__file__), ".env")
+        env_vars = dotenv_values(env_path)
+        number_jobs = int(env_vars.get("PARALLELISM", 3))  # Default to 3 if not set
+
         manifest_path = os.path.join(os.path.dirname(__file__), "worker.yaml")
         utils.create_from_yaml(k8s_client, manifest_path)
         # Wait for the pods to start (initial delay)
         print("Waiting for worker pods to start...")
         time.sleep(10)
 
-        # Get the job to determine expected completions
-        job = batch_v1.read_namespaced_job(name="worker", namespace="default")
-        #expected_completions = job.spec.completions or 5
-        expected_completions = 3
-        print(f"Job expects {expected_completions} completions")
-
-        # Set up monitoring
-        completed_pods = set()
-        start_time = time.time()
-
-        # Create a watch for pod status changes
-        w = watch.Watch()
-
-        try:
-            # Watch for pod status changes
-            for event in w.stream(
-                core_v1.list_namespaced_pod,
-                namespace="default",
-                label_selector="job-name=worker"
-            ):
-                pod = event['object']
-                pod_name = pod.metadata.name
-
-                # If the pod succeeded and we haven't counted it yet
-                if pod_name not in completed_pods and pod.status.phase == "Succeeded":
-                    completed_pods.add(pod_name)
-                    print(f"Pod {pod_name} completed successfully ({len(completed_pods)}/{expected_completions})")
-
-                    # If all expected pods are complete, we're done
-                    if len(completed_pods) >= expected_completions:
-                        print("All worker pods have completed successfully!")
-                        w.stop()
-                        break
-                
-
-        except Exception as e:
-            print(f"Error watching pods: {e}")
-        finally:
-            # Make sure we stop the watch
-            w.stop()
-
-        # Final status report
-        elapsed = time.time() - start_time
-        print(f"Training job monitoring completed after {elapsed:.1f} seconds")
-        print(f"Completed pods: {len(completed_pods)}/{expected_completions}")
+        self._wait_for_pods_ready(label_selector="job-name=worker", namespace_name="default", number_jobs=number_jobs,  target_phase="Succeeded")
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):
@@ -385,16 +411,10 @@ def main():
 
     finally:
         pass
-    '''
         # Stop port forwarding to Prometheus
         if prometheus_process:
             prometheus_process.terminate()
             print("Prometheus port forwarding stopped")
-        if postgres_process:
-            postgres_process.terminate()
-            print("Postgres port forwarding stopped")
-    '''
-    
 
 
 

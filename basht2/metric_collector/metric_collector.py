@@ -10,8 +10,10 @@ import subprocess
 
 
 class MetricCollector:
-    def __init__(self, prometheus_url="http://localhost:9090/api/v1/query"):
+    def __init__(self, prometheus_url="http://localhost:9090/api/v1/query", electricitymap_zone="AE", electricitymap_token="dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph"):
         self.prometheus_url = prometheus_url
+        self.electricitymap_zone = electricitymap_zone
+        self.electricitymap_token = electricitymap_token
         self.metrics = {"steps": {}}
         self.timestamps = {}
         self.b_f1_Score = 0
@@ -204,7 +206,7 @@ class MetricCollector:
             total_cf = 0
 
         self.metrics["steps"][step_name].update({
-            'avg_power_watts': avg_power,
+            #'avg_power_watts': avg_power,
             'total_energy_kwh': total_kwh,
             'total_energy_cf': total_cf
         })
@@ -241,7 +243,7 @@ class MetricCollector:
             cpu_cf = 0
 
         self.metrics["steps"][step_name].update({
-            'avg_cpu_power_watts': avg_cpu_power,
+            #'avg_cpu_power_watts': avg_cpu_power,
             'cpu_energy_kwh': cpu_kwh,
             'cpu_energy_cf': cpu_cf
         })
@@ -278,7 +280,7 @@ class MetricCollector:
             dram_cf = 0
 
         self.metrics["steps"][step_name].update({
-            'avg_dram_power_watts': avg_dram_power,
+            #'avg_dram_power_watts': avg_dram_power,
             'dram_energy_kwh': dram_kwh,
             'dram_energy_cf': dram_cf
         })
@@ -310,7 +312,7 @@ class MetricCollector:
 
         self.metrics["steps"][step_name].update({
             #'gpu_energy_joules': gpu_energy,
-            'avg_gpu_power_watts': avg_gpu_power,
+            #'avg_gpu_power_watts': avg_gpu_power,
             'gpu_energy_kwh': gpu_kwh,
             'gpu_energy_cf': gpu_cf
         })
@@ -439,6 +441,10 @@ class MetricCollector:
             'cpu_energy_cf': total_cpu_cf,
             'dram_energy_kwh': total_dram_kwh,
             'dram_energy_cf': total_dram_cf,
+            'gpu_energy_kwh': total_gpu_kwh,
+            'gpu_energy_cf': total_gpu_cf,
+            'network_transmit_bytes': total_transmit_kwh,
+            'network_receive_bytes': total_receive_kwh,
             'f1_score': f1_score
         }
 
@@ -466,7 +472,7 @@ class MetricCollector:
 
 
         self.metrics["steps"][step_name].update({
-            'avg_power_watts': avg_power,
+            #'avg_power_watts': avg_power,
             'total_energy_kwh': total_kwh,
             'total_energy_cf': total_cf
         })
@@ -492,14 +498,14 @@ class MetricCollector:
             cpu_cf = 0
 
         self.metrics["steps"][step_name].update({
-            'avg_cpu_power_watts': avg_power,
+            #'avg_cpu_power_watts': avg_power,
             'cpu_energy_kwh': cpu_kwh,
             'cpu_energy_cf': cpu_cf
         })
 
     def _calculate_dram_increase(self, step_name, start_time, end_time, duration):
         """Calculate DRAM energy metrics using the rate function over a time range."""
-        dram_increase = self._get_energy_rate_in_range('dram', start_time, end_time, duration)
+        dram_increase = self._get_energy_increase_at_timestamp('dram', start_time, end_time, duration)
 
         if "steps" not in self.metrics:
             self.metrics["steps"] = {}
@@ -518,14 +524,14 @@ class MetricCollector:
             dram_cf = 0
     
         self.metrics["steps"][step_name].update({
-            'avg_dram_power_watts': avg_power,
+            #'avg_dram_power_watts': avg_power,
             'dram_energy_kwh': dram_kwh,
             'dram_energy_cf': dram_cf
         })
     
     def _calculate_gpu_increase(self, step_name, start_time, end_time, duration):
         """Calculate DRAM energy metrics using the rate function over a time range."""
-        gpu_increase = self._get_energy_rate_in_range('gpu', start_time, end_time, duration)
+        gpu_increase = self._get_energy_increase_at_timestamp('gpu', start_time, end_time, duration)
 
         if "steps" not in self.metrics:
             self.metrics["steps"] = {}
@@ -544,7 +550,7 @@ class MetricCollector:
             gpu_cf = 0
     
         self.metrics["steps"][step_name].update({
-            'avg_gpu_power_watts': avg_power,
+            #'avg_gpu_power_watts': avg_power,
             'gpu_energy_kwh': gpu_kwh,
             'gpu_energy_cf': gpu_cf
         })
@@ -806,6 +812,7 @@ class MetricCollector:
             print(f"Error querying Prometheus for {energy_type} energy")
             return None
         
+    '''
     def _get_energy_rate_in_range(self, energy_type, start_time, end_time, duration):
         """Query Prometheus for energy rates within a specific time range."""
         try:
@@ -847,6 +854,7 @@ class MetricCollector:
         except Exception as e:
             print(f"Error querying Prometheus for {energy_type} rate in range: {e}")
             return None
+    '''
     
     def calculate_overall_metrics(self):
         """Calculate overall metrics for the entire experiment duration using the increase method."""
@@ -897,16 +905,16 @@ class MetricCollector:
             "duration_seconds": duration,
             "total_energy_kwh": total_kwh,
             "total_energy_cf": total_cf,
-            "avg_power_watts": avg_power,
+            #"avg_power_watts": avg_power,
             "cpu_energy_kwh": cpu_kwh,
             "cpu_energy_cf": cpu_cf,
-            "avg_cpu_power_watts": avg_cpu_power,
+            #"avg_cpu_power_watts": avg_cpu_power,
             "dram_energy_kwh": dram_kwh,
             "dram_energy_cf": dram_cf,
-            "avg_dram_power_watts": avg_dram_power,
+            #"avg_dram_power_watts": avg_dram_power,
             "gpu_energy_kwh": gpu_kwh,
             "gpu_energy_cf": gpu_cf,
-            "avg_gpu_power_watts": avg_gpu_power,
+            #"avg_gpu_power_watts": avg_gpu_power,
             "network_transmit_bytes": tx_bytes if tx_bytes is not None else 0,
             "network_receive_bytes": rx_bytes if rx_bytes is not None else 0
         }
@@ -959,10 +967,11 @@ class MetricCollector:
         # Convert watts to kilowatts and calculate kWh
         return (watts / 1000) * duration_hours
     
-    def _get_carbon_intensity(self, zone="AE"):
+    def _get_carbon_intensity(self):
         """Fetch the carbon intensity from the API."""
+        zone = self.electricitymap_zone
         url = "https://api.electricitymap.org/v3/carbon-intensity/latest"
-        headers = {"auth-token": "dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph"}
+        headers = {"auth-token": self.electricitymap_token}
         params = {"zone": zone}
 
         response = requests.get(url, headers=headers, params=params)
