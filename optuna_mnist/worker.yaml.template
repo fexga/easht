@@ -24,6 +24,13 @@ spec:
           command:
             - python
             - pytorch_lightning_distributed.py
+          resources:
+            requests:
+              memory: "{{POD_MEMORY}}Mi"
+              cpu: "{{POD_CPU}}m"
+            limits:
+              memory: "{{POD_MEMORY}}Mi"
+              cpu: "{{POD_CPU}}m"
           envFrom:
             - secretRef:
                 name: postgres-secrets

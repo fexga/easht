@@ -7,16 +7,33 @@ import os
 from kubernetes import client, config
 import optuna
 import subprocess
+from datetime import datetime
 
 
 class MetricCollector:
-    def __init__(self, prometheus_url="http://localhost:9090/api/v1/query", electricitymap_zone="AE", electricitymap_token="dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph"):
+    def __init__(self, prometheus_url="http://localhost:9090/api/v1/query", electricitymap_zone="AE", electricitymap_token="dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph",     
+        experiment_vars = [
+        "EPOCHS",
+        "PARALLELISM",
+        "MODEL_IMPLEMENTATION",
+        "POD_CPU",
+        "POD_MEMORY",
+        "ACCELERATOR_TYPE",
+        "ACCELERATOR_MEMORY",
+        "DATA_LOADING_METHOD",
+        "BATCH_SIZE",
+        "WORKER_NODE_SYNC",
+        "COMP_DISTRIBUTION",
+        "HPO_FRAMEWORK",
+        "HPO_IMPLEMENTATION"
+    ]):
         self.prometheus_url = prometheus_url
         self.electricitymap_zone = electricitymap_zone
         self.electricitymap_token = electricitymap_token
         self.metrics = {"steps": {}}
         self.timestamps = {}
         self.b_f1_Score = 0
+        self.experiment_vars = experiment_vars
         
         env_file_path = os.path.join(os.getcwd(), ".env")
         self.env_vars = dotenv_values(env_file_path)
@@ -145,14 +162,15 @@ class MetricCollector:
         if "meta" not in self.metrics:
             self.metrics["meta"] = {}
 
-        # List of environment variables to include in 'meta'
-        required_env_vars = ["BATCHSIZE", "EPOCHS", "PERCENT_VALID_EXAMPLES", "CLASSES"]
-
         # Add the environment variables to the 'meta' field
-        for var in required_env_vars:
+        for var in self.experiment_vars:
             value = os.getenv(var)
             if value is not None:
                 self.metrics["meta"][var] = value
+
+        current_time = datetime.now()
+        formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+        self.metrics["meta"]["completion_datetime"] = formatted_time
 
         print(f"Added all environment variables to 'meta': {self.metrics['meta']}")
 

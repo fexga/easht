@@ -1,15 +1,15 @@
 import os
-import docker
 from kubernetes import client, config, utils, watch
 import subprocess
-import sys
 from basht2.metric_collector.metric_collector import MetricCollector
 import time
 from dotenv import dotenv_values, load_dotenv
 
-from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, validate_env_vars
+from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, HelperFunctions
 
+helper = HelperFunctions()
 
+'''
 def build_docker_image(image_name):
     dockerfile_path = os.path.join(os.path.dirname(__file__))
     command = f"docker build -t {image_name} {dockerfile_path}"
@@ -65,13 +65,14 @@ def generate_worker_yaml_from_env(env_path, template_path, output_path):
 
     with open(output_path, "w") as f:
         f.write(content)
-
+'''
 
 class OptunaBenchmark(Benchmark, MetricCollector):
 
     def __init__(self):
         MetricCollector.__init__(self)  # Initialize the KeplerMetrics class
 
+    '''
     def _wait_for_pods_ready(self, label_selector, number_jobs, namespace_name, target_phase):
         """
         Wait for pods matching the label selector to reach the target phase.
@@ -172,7 +173,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
                 print(f"Error deleting service {service.metadata.name}: {e}")
 
         print("All resources deleted.")
-
+    '''
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def setup(self):
@@ -184,7 +185,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
         # Wait for PostgreSQL pod to be running
         print("Waiting for PostgreSQL pods to be ready...")
-        self._wait_for_pods_ready(label_selector="app=postgres", namespace_name="default", number_jobs=1,  target_phase="Running")
+        helper._wait_for_pods_ready(label_selector="app=postgres", number_jobs=1,  target_phase="Running")
         print("PostgreSQL deployment complete!")
 
         print(f"Waiting 15 additional seconds for services to initialize...")
@@ -196,7 +197,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         utils.create_from_yaml(k8s_client, manifest_path)
 
         print("Waiting for study-creator job to complete...")
-        self._wait_for_pods_ready(label_selector="job-name=study-creator", namespace_name="default", number_jobs=1,  target_phase="Succeeded")
+        helper._wait_for_pods_ready(label_selector="job-name=study-creator", number_jobs=1,  target_phase="Succeeded")
         print("Study setup complete!")
 
     @MetricCollector.measure_power(aggregation_method='increase')
@@ -212,7 +213,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         utils.create_from_yaml(k8s_client, manifest_path)
 
         print("Waiting for worker pods to finish...")
-        self._wait_for_pods_ready(label_selector="job-name=worker", namespace_name="default", number_jobs=number_jobs,  target_phase="Succeeded")
+        helper._wait_for_pods_ready(label_selector="job-name=worker", number_jobs=number_jobs,  target_phase="Succeeded")
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):
@@ -234,7 +235,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
             else:
                 print(f"Error deleting StatefulSet 'postgres': {e}")
     
-        self._delete_all_resources_in_namespace(namespace)
+        helper._delete_all_resources_in_namespace()
     
 def main():
     
@@ -244,10 +245,10 @@ def main():
 
     worker_template_path = os.path.join(os.path.dirname(__file__), "worker.yaml.template")
     worker_yaml_path = os.path.join(os.path.dirname(__file__), "worker.yaml")
-    generate_worker_yaml_from_env(env_file_path, worker_template_path, worker_yaml_path)
+    helper.generate_worker_yaml_from_env(env_file_path, worker_template_path, worker_yaml_path)
 
     # Create the ConfigMap from the .env file
-    create_configmap_from_env(env_file_path, configmap_name="training-config")
+    helper._create_configmap_from_env(env_file_path, configmap_name="training-config")
     
     # Set up port forwarding to Prometheus
     REQUIRED_ENV_VARS = ["BATCHSIZE", "EPOCHS", "PERCENT_VALID_EXAMPLES", "CLASSES"]
@@ -263,13 +264,14 @@ def main():
     
     
     try:
-        build_docker_image("optuna-kubernetes-mlflow3:example")
-        load_docker_image_into_kind("optuna-kubernetes-mlflow3:example")
+        optuna_path = os.path.dirname(__file__)
+        helper._build_docker_image("optuna-kubernetes-mlflow3:example", dockerfile_path=optuna_path)
+        helper._load_docker_image_into_kind("optuna-kubernetes-mlflow3:example")
 
         ob = OptunaBenchmark()
 
         runner = BenchmarkRunner(benchmark_cls=ob)
-        validate_env_vars(REQUIRED_ENV_VARS)
+        helper.validate_env_vars()
 
         runner.run()
 
