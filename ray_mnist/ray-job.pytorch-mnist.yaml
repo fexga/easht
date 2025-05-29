@@ -4,12 +4,13 @@ metadata:
   name: rayjob-pytorch-mnist
 spec:
   shutdownAfterJobFinishes: false
-  entrypoint: python ray-operator/config/samples/pytorch-mnist/ray_train_pytorch_mnist.py
+  entrypoint: python /app/script.py 
   runtimeEnvYAML: |
     pip:
       - torch
       - torchvision
-    working_dir: "https://github.com/ray-project/kuberay/archive/master.zip"
+      - kubernetes
+      - python-dotenv
     env_vars:
       NUM_WORKERS: "2"
       CPUS_PER_WORKER: "1"
@@ -22,23 +23,30 @@ spec:
       # Pod template
       template:
         spec:
-          containers:
-            - name: ray-head
-              image: rayproject/ray:2.41.0
-              ports:
-                - containerPort: 6379
-                  name: gcs-server
-                - containerPort: 8265 # Ray dashboard
-                  name: dashboard
-                - containerPort: 10001
-                  name: client
-              resources:
-                limits:
-                  cpu: "1"
-                  memory: "1Gi"
-                requests:
-                  cpu: "1"
-                  memory: "1Gi"
+          volumes:  # Move this here
+          - name: script-volume
+            configMap:
+              name: ray-script
+          containers:  # Only one containers section
+          - name: ray-head
+            image: rayproject/ray:2.41.0
+            ports:
+              - containerPort: 6379
+                name: gcs-server
+              - containerPort: 8265
+                name: dashboard
+              - containerPort: 10001
+                name: client
+            resources:
+              limits:
+                cpu: "1"
+                memory: "1Gi"
+              requests:
+                cpu: "1"
+                memory: "1Gi"
+            volumeMounts:  # This stays in the container
+            - name: script-volume
+              mountPath: /app
     workerGroupSpecs:
       - replicas: 2
         minReplicas: 1

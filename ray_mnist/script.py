@@ -9,7 +9,7 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 
 BATCHSIZE = 128
-EPOCHS = 5
+EPOCHS = 1
 
 class Net(nn.Module):
     def __init__(self, config):
