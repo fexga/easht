@@ -3,17 +3,33 @@ kind: RayJob
 metadata:
   name: rayjob-pytorch-mnist
 spec:
-  shutdownAfterJobFinishes: false
-  entrypoint: python /app/script.py 
-  runtimeEnvYAML: |
-    pip:
-      - torch
-      - torchvision
-      - kubernetes
-      - python-dotenv
-    env_vars:
-      NUM_WORKERS: "2"
-      CPUS_PER_WORKER: "1"
+  entrypoint: python /app/script.py
+  jobSubmitterTemplateSpec:
+    spec:
+      containers:
+      - name: ray-job-submitter
+        image: ray-mnist:latest
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: script-volume
+          mountPath: /app
+      volumes:
+      - name: script-volume
+        configMap:
+          name: ray-script
+  driverTemplateSpec:  # Add this section
+    spec:
+      containers:
+        - name: ray-driver
+          image: ray-mnist:latest
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: script-volume
+            mountPath: /app
+      volumes:
+      - name: script-volume
+        configMap:
+          name: ray-script
 
   # rayClusterSpec specifies the RayCluster instance to be created by the RayJob controller.
   rayClusterSpec:
@@ -29,7 +45,8 @@ spec:
               name: ray-script
           containers:  # Only one containers section
           - name: ray-head
-            image: rayproject/ray:2.41.0
+            image: ray-mnist:latest 
+            imagePullPolicy: IfNotPresent
             ports:
               - containerPort: 6379
                 name: gcs-server
@@ -39,16 +56,16 @@ spec:
                 name: client
             resources:
               limits:
-                cpu: "1"
-                memory: "1Gi"
+                cpu: "2"
+                memory: "2Gi"
               requests:
-                cpu: "1"
+                cpu: "2"
                 memory: "1Gi"
             volumeMounts:  # This stays in the container
             - name: script-volume
               mountPath: /app
     workerGroupSpecs:
-      - replicas: 2
+      - replicas: 3
         minReplicas: 1
         maxReplicas: 5
         groupName: small-group
@@ -58,11 +75,12 @@ spec:
           spec:
             containers:
               - name: ray-worker
-                image: rayproject/ray:2.41.0
+                image: ray-mnist:latest 
+                imagePullPolicy: IfNotPresent
                 resources:
                   limits:
-                    cpu: "1"
-                    memory: "1Gi"
+                    cpu: "2"
+                    memory: "2Gi"
                   requests:
                     cpu: "1"
                     memory: "1Gi"
