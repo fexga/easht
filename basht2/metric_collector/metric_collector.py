@@ -198,56 +198,79 @@ class MetricCollector:
     
     def _set_ray_f1_score(self):
         """
-        Get the best validation metrics from Ray Tune experiment.
+        Get the best F1 score from Ray Tune experiment running in Kubernetes.
         """
         try:
-            # Connect to the Ray cluster
-            ray_address = os.environ.get("RAY_ADDRESS", "ray://127.0.0.1:10001")
-            if not ray.is_initialized():
-                ray.init(address=ray_address, ignore_reinit_error=True)
-
-            # Find Ray results directory - typically in ~/ray_results
-            ray_results = os.path.expanduser("~/ray_results")
-            # Get most recent experiment by modification time
-            if os.path.exists(ray_results):
-                experiments = sorted(
-                    [os.path.join(ray_results, exp) for exp in os.listdir(ray_results)],
-                    key=os.path.getmtime
-                )
-                if experiments:
-                    latest_experiment = experiments[-1]
-                    print(f"Found Ray experiment at: {latest_experiment}")
-
-                    # Load experiment analysis
-                    analysis = ExperimentAnalysis(latest_experiment)
-
-                    # Get best trial for val_accuracy (or val_loss)
-                    best_trial = analysis.get_best_trial("val_accuracy", mode="max")
-                    if best_trial:
-                        accuracy = best_trial.last_result["val_accuracy"]
-                        loss = best_trial.last_result.get("val_loss", None)
-
-                        print(f"Best trial accuracy: {accuracy:.4f}")
-                        if loss:
-                            print(f"Best trial loss: {loss:.4f}")
-
-                        # Save to metrics
-                        self.b_f1_Score = accuracy  # Use accuracy as the F1 score
-
-                        # Add to metrics dictionary
-                        if "meta" not in self.metrics:
-                            self.metrics["meta"] = {}
-
-                        self.metrics["meta"]["val_accuracy"] = accuracy
-                        if loss:
-                            self.metrics["meta"]["val_loss"] = loss
-
-                        return True
+            import subprocess
+            import tempfile
+            import shutil
+            
+            # Find the Ray head pod
+            result = subprocess.run([
+                "kubectl", "get", "pods", "-l", "ray.io/node-type=head", 
+                "-o", "jsonpath={.items[0].metadata.name}"
+            ], capture_output=True, text=True, check=True)
+            
+            head_pod = result.stdout.strip()
+            if not head_pod:
+                print("No Ray head pod found")
+                return False
+                
+            print(f"Found Ray head pod: {head_pod}")
+            
+            # Create temporary directory for results
+            with tempfile.TemporaryDirectory() as temp_dir:
+                local_results = os.path.join(temp_dir, "ray_results")
+                
+                # Copy ray_results from pod to local machine
+                subprocess.run([
+                    "kubectl", "cp", f"default/{head_pod}:/tmp/ray_results", local_results
+                ], check=True)
+                
+                # Find the most recent experiment
+                if os.path.exists(local_results):
+                    experiments = []
+                    for exp_dir in os.listdir(local_results):
+                        exp_path = os.path.join(local_results, exp_dir)
+                        if os.path.isdir(exp_path):
+                            experiments.append(exp_path)
+                    
+                    if experiments:
+                        # Sort by modification time to get the latest
+                        latest_experiment = max(experiments, key=os.path.getmtime)
+                        print(f"Found latest experiment: {latest_experiment}")
+                        
+                        # Load experiment analysis
+                        from ray.tune import ExperimentAnalysis
+                        analysis = ExperimentAnalysis(latest_experiment)
+                        
+                        # Try different metric names for F1 score
+                        for metric_name in ["f1_score", "val_f1", "f1", "val_accuracy"]:
+                            try:
+                                best_trial = analysis.get_best_trial(metric_name, mode="max")
+                                if best_trial and metric_name in best_trial.last_result:
+                                    f1_score = best_trial.last_result[metric_name]
+                                    print(f"Best {metric_name}: {f1_score:.4f}")
+                                    self.b_f1_Score = f1_score
+                                    return True
+                            except Exception as e:
+                                print(f"Metric {metric_name} not found: {e}")
+                                continue
+                            
+                        # If no specific F1 metric found, list all available metrics
+                        if experiments:
+                            print("Available metrics in best trial:")
+                            best_trial = analysis.get_best_trial()
+                            for key, value in best_trial.last_result.items():
+                                if isinstance(value, (int, float)):
+                                    print(f"  {key}: {value}")
+                            
+            print("Could not find F1 score in Ray results")
+            return False
+            
         except Exception as e:
-            print(f"Error retrieving Ray metrics: {e}")
-
-        print("Could not retrieve Ray metrics")
-        return False
+            print(f"Error retrieving Ray F1 score: {e}")
+            return False
 
     def _calculate_total_energy(self, step_name, start_time, end_time, duration):
         """Calculate total energy metrics."""

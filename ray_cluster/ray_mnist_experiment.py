@@ -1,6 +1,7 @@
 import os
 from kubernetes import client, config, utils, watch
 import subprocess
+import socket
 from basht2.metric_collector.metric_collector import MetricCollector
 import time
 from dotenv import dotenv_values, load_dotenv
@@ -14,14 +15,28 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
     def __init__(self):
         MetricCollector.__init__(self)  # Initialize the KeplerMetrics class
+        self.ray_port_forward = None
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def setup(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
 
-        kuberay_path = os.path.join(os.path.dirname(__file__), 'kuberay-manifests/default')
-        utils.create_from_directory(k8s_client, kuberay_path)
+        kuberay_dir = os.path.join(os.path.dirname(__file__), 'kuberay-manifests/default')
+        os.makedirs(kuberay_dir, exist_ok=True)
+
+        # Use KubeRay's standard deployment method for Kind
+        print("Setting up KubeRay operator...")
+        result = subprocess.run(
+            ["kubectl", "create", "-k", "github.com/ray-project/kuberay/ray-operator/config/default"],
+            check=False,
+            capture_output=True,
+            text=True
+        )
+
+        # Print both stdout and stderr for debugging
+        print(f"STDOUT: {result.stdout}")
+        print(f"STDERR: {result.stderr}")
 
         # Wait for Operator pod to be running
         print("Waiting for Operator pod to be ready...")
@@ -33,10 +48,41 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         print("Extra waiting period complete.")
 
         raycluster_path = os.path.join(os.path.dirname(__file__), 'raycluster.yaml')
-        utils.create_from_yaml(k8s_client, raycluster_path)
+        print(f"Applying Ray cluster configuration from {raycluster_path}...")
+        result = subprocess.run(
+            ["kubectl", "apply", "-f", raycluster_path],
+            check=False,
+            capture_output=True,
+            text=True
+        )
 
-        print("Waiting for Ray Cluster to complete...")
+        print("Waiting for Ray Cluster to be ready...")
         helper._wait_for_pods_ready(label_selector="ray.io/node-type=head", number_jobs=1,  target_phase="Running")
+        helper._wait_for_pods_ready(label_selector="ray.io/node-type=worker", number_jobs=2,  target_phase="Running")
+        print("Ray Cluster deployment complete!")
+
+        # Start port forwarding
+        print("Setting up port forwarding...")
+        port_forward_process = subprocess.Popen(
+            ["kubectl", "port-forward", "svc/raycluster-head-svc", "8265:8265"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        # Verify port forwarding works
+        print("Verifying port forwarding...")
+        for attempt in range(10):
+            try:
+                with socket.create_connection(("127.0.0.1", 8265), timeout=2):
+                    print("✓ Port forwarding successful!")
+                    break
+            except Exception as e:
+                print(f"Attempt {attempt+1}/10: Port not ready: {e}")
+                time.sleep(3)
+        else:
+            print("WARNING: Could not verify port forwarding")
+
+
         print("Study setup complete!")
 
     @MetricCollector.measure_power(aggregation_method='increase')
@@ -47,14 +93,18 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
         # Define the runtime environment
         runtime_env = {
-            "pip": "ray_cluster/requirements.txt"  # Path to requirements.txt
+            "working_dir": "ray_cluster",  # Directory containing the script and requirements.txt
+            "pip": "ray_cluster/requirements.txt",
+            "excludes": [                  # Exclude large files
+                "**prometheus_snapshots/**",
+                "**.git/**"
+            ]
         }
 
         # Submit the job
         job_id = client.submit_job(
-            entrypoint="python script.py",
-            runtime_env=runtime_env,
-            working_dir="ray_cluster"
+            entrypoint="python ray_cluster/script.py",
+            runtime_env=runtime_env
         )
 
         # Watch job status until completion - no timeout
@@ -77,8 +127,15 @@ class OptunaBenchmark(Benchmark, MetricCollector):
     def deprovision(self):
         self._set_ray_f1_score()
         """Delete all resources in the namespace and wait until they are gone."""
+
+        # Clean up port forwarding
+        if self.ray_port_forward:
+            self.ray_port_forward.terminate()
+            print("Ray dashboard port forwarding stopped")
     
         helper._delete_all_resources_in_namespace()
+        print(f"Waiting 5 additional seconds for services to undeploy...")
+        time.sleep(5)
     
 def main():
     
@@ -103,6 +160,8 @@ def main():
     
     # Give port forwarding time to establish
     time.sleep(5)
+
+    os.environ["RAY_ADDRESS"] = "http://127.0.0.1:8265"
     
     
     try:
