@@ -9,7 +9,7 @@ import ray
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import Callback
+from ray.tune.integration.pytorch_lightning import TuneReportCallback
 
 # Get settings from environment variables or use defaults
 #BATCHSIZE = int(os.environ.get("BATCHSIZE", "128"))
@@ -18,7 +18,7 @@ from pytorch_lightning.callbacks import Callback
 #PARALLELISM = int(os.environ.get("PARALLELISM", "4"))
 
 
-ray.init(address="auto")
+ray.init(address="auto", ignore_reinit_error=True)
 
 # Create a PyTorch Lightning Module
 class LightningMNISTModel(pl.LightningModule):
@@ -77,25 +77,21 @@ class LightningMNISTModel(pl.LightningModule):
         val_dataset = MNIST(root="/tmp/data", train=False, transform=transform, download=True)
         return dt.DataLoader(dataset=val_dataset, batch_size=128)
 
-# Callback to report metrics to Ray Tune
-class TuneReportCallback(Callback):
-    def on_validation_end(self, trainer, pl_module):
-        metrics = {
-            "loss": trainer.callback_metrics["loss"].item(),
-            "val_loss": trainer.callback_metrics["val_loss"].item(), 
-            "val_accuracy": trainer.callback_metrics["val_accuracy"].item()
-        }
-        tune.report(**metrics)
 
 # Training function for Ray Tune
 def train_mnist_lightning(config):
     model = LightningMNISTModel(config)
+    metrics = {"val_loss": "val_loss", "val_accuracy": "val_accuracy"}
+    
+    # Ray Tune's callback properly handles metrics that don't exist yet
+    callback = TuneReportCallback(metrics, on="validation_end")
     trainer = pl.Trainer(
         max_epochs=1,
         enable_checkpointing=False,
         logger=False,
         enable_progress_bar=False,
-        callbacks=[TuneReportCallback()]
+        callbacks=[callback],
+        num_sanity_val_steps=0
     )
     trainer.fit(model)
 
@@ -123,7 +119,7 @@ analysis = tune.run(
     train_mnist_lightning,
     resources_per_trial={"cpu": 1},
     config=search_space,
-    num_samples=3,
+    num_samples=10,
     max_concurrent_trials=3,
     scheduler=scheduler
 )

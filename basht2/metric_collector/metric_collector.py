@@ -8,6 +8,9 @@ from kubernetes import client, config
 import optuna
 import subprocess
 from datetime import datetime
+from ray.tune import ExperimentAnalysis
+import os
+import ray
 
 
 class MetricCollector:
@@ -192,6 +195,59 @@ class MetricCollector:
 
 
         self.b_f1_Score = best_score
+    
+    def _set_ray_f1_score(self):
+        """
+        Get the best validation metrics from Ray Tune experiment.
+        """
+        try:
+            # Connect to the Ray cluster
+            ray_address = os.environ.get("RAY_ADDRESS", "ray://127.0.0.1:10001")
+            if not ray.is_initialized():
+                ray.init(address=ray_address, ignore_reinit_error=True)
+
+            # Find Ray results directory - typically in ~/ray_results
+            ray_results = os.path.expanduser("~/ray_results")
+            # Get most recent experiment by modification time
+            if os.path.exists(ray_results):
+                experiments = sorted(
+                    [os.path.join(ray_results, exp) for exp in os.listdir(ray_results)],
+                    key=os.path.getmtime
+                )
+                if experiments:
+                    latest_experiment = experiments[-1]
+                    print(f"Found Ray experiment at: {latest_experiment}")
+
+                    # Load experiment analysis
+                    analysis = ExperimentAnalysis(latest_experiment)
+
+                    # Get best trial for val_accuracy (or val_loss)
+                    best_trial = analysis.get_best_trial("val_accuracy", mode="max")
+                    if best_trial:
+                        accuracy = best_trial.last_result["val_accuracy"]
+                        loss = best_trial.last_result.get("val_loss", None)
+
+                        print(f"Best trial accuracy: {accuracy:.4f}")
+                        if loss:
+                            print(f"Best trial loss: {loss:.4f}")
+
+                        # Save to metrics
+                        self.b_f1_Score = accuracy  # Use accuracy as the F1 score
+
+                        # Add to metrics dictionary
+                        if "meta" not in self.metrics:
+                            self.metrics["meta"] = {}
+
+                        self.metrics["meta"]["val_accuracy"] = accuracy
+                        if loss:
+                            self.metrics["meta"]["val_loss"] = loss
+
+                        return True
+        except Exception as e:
+            print(f"Error retrieving Ray metrics: {e}")
+
+        print("Could not retrieve Ray metrics")
+        return False
 
     def _calculate_total_energy(self, step_name, start_time, end_time, duration):
         """Calculate total energy metrics."""
