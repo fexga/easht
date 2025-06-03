@@ -198,78 +198,74 @@ class MetricCollector:
     
     def _set_ray_f1_score(self):
         """
-        Get the best F1 score from Ray Tune experiment running in Kubernetes.
+        Get the best validation accuracy from Ray Tune experiment running in Kubernetes.
+        This matches the Optuna experiment's definition of "best score".
         """
         try:
             import subprocess
             import tempfile
-            import shutil
-            
+            import os
+            from ray.tune import ExperimentAnalysis
+    
             # Find the Ray head pod
             result = subprocess.run([
-                "kubectl", "get", "pods", "-l", "ray.io/node-type=head", 
+                "kubectl", "get", "pods", "-l", "ray.io/node-type=head",
                 "-o", "jsonpath={.items[0].metadata.name}"
             ], capture_output=True, text=True, check=True)
-            
             head_pod = result.stdout.strip()
             if not head_pod:
                 print("No Ray head pod found")
                 return False
-                
+    
             print(f"Found Ray head pod: {head_pod}")
-            
+    
             # Create temporary directory for results
             with tempfile.TemporaryDirectory() as temp_dir:
                 local_results = os.path.join(temp_dir, "ray_results")
-                
+    
                 # Copy ray_results from pod to local machine
-                subprocess.run([
+                cp_result = subprocess.run([
                     "kubectl", "cp", f"default/{head_pod}:/tmp/ray_results", local_results
-                ], check=True)
-                
-                # Find the most recent experiment
+                ], capture_output=True, text=True)
+                if cp_result.returncode != 0:
+                    print(f"Failed to copy ray_results: {cp_result.stderr}")
+                    return False
+    
+                # Find the most recent experiment directory
                 if os.path.exists(local_results):
-                    experiments = []
-                    for exp_dir in os.listdir(local_results):
-                        exp_path = os.path.join(local_results, exp_dir)
-                        if os.path.isdir(exp_path):
-                            experiments.append(exp_path)
-                    
-                    if experiments:
-                        # Sort by modification time to get the latest
-                        latest_experiment = max(experiments, key=os.path.getmtime)
-                        print(f"Found latest experiment: {latest_experiment}")
-                        
-                        # Load experiment analysis
-                        from ray.tune import ExperimentAnalysis
-                        analysis = ExperimentAnalysis(latest_experiment)
-                        
-                        # Try different metric names for F1 score
-                        for metric_name in ["f1_score", "val_f1", "f1", "val_accuracy"]:
-                            try:
-                                best_trial = analysis.get_best_trial(metric_name, mode="max")
-                                if best_trial and metric_name in best_trial.last_result:
-                                    f1_score = best_trial.last_result[metric_name]
-                                    print(f"Best {metric_name}: {f1_score:.4f}")
-                                    self.b_f1_Score = f1_score
-                                    return True
-                            except Exception as e:
-                                print(f"Metric {metric_name} not found: {e}")
-                                continue
-                            
-                        # If no specific F1 metric found, list all available metrics
-                        if experiments:
-                            print("Available metrics in best trial:")
-                            best_trial = analysis.get_best_trial()
-                            for key, value in best_trial.last_result.items():
-                                if isinstance(value, (int, float)):
-                                    print(f"  {key}: {value}")
-                            
-            print("Could not find F1 score in Ray results")
-            return False
-            
+                    experiments = [
+                        os.path.join(local_results, d)
+                        for d in os.listdir(local_results)
+                        if os.path.isdir(os.path.join(local_results, d))
+                    ]
+                    if not experiments:
+                        print("No experiments found in ray_results")
+                        return False
+    
+                    latest_experiment = max(experiments, key=os.path.getmtime)
+                    print(f"Found latest experiment: {latest_experiment}")
+    
+                    # Analyze experiment results
+                    analysis = ExperimentAnalysis(latest_experiment)
+                    # Always use val_accuracy for comparability with Optuna
+                    try:
+                        best_trial = analysis.get_best_trial("val_accuracy", mode="max")
+                        if best_trial and "val_accuracy" in best_trial.last_result:
+                            val_acc = best_trial.last_result["val_accuracy"]
+                            print(f"Best val_accuracy: {val_acc:.4f}")
+                            self.b_f1_Score = val_acc
+                            return True
+                        else:
+                            print("val_accuracy not found in best trial results.")
+                            return False
+                    except Exception as e:
+                        print(f"Error extracting val_accuracy: {e}")
+                        return False
+                else:
+                    print("ray_results directory does not exist after copy.")
+                    return False
         except Exception as e:
-            print(f"Error retrieving Ray F1 score: {e}")
+            print(f"Error retrieving Ray validation accuracy: {e}")
             return False
 
     def _calculate_total_energy(self, step_name, start_time, end_time, duration):

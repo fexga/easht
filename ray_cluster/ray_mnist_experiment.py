@@ -103,7 +103,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
         # Submit the job
         job_id = client.submit_job(
-            entrypoint="python ray_cluster/script.py",
+            entrypoint="python script.py",
             runtime_env=runtime_env
         )
 
