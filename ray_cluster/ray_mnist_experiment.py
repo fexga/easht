@@ -63,7 +63,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
         # Start port forwarding
         print("Setting up port forwarding...")
-        port_forward_process = subprocess.Popen(
+        self.ray_port_forward = subprocess.Popen(
             ["kubectl", "port-forward", "svc/raycluster-head-svc", "8265:8265"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -125,10 +125,11 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):
-        self._set_ray_f1_score()
+        self.get_best_val_acc_from_file("raycluster-head")
         """Delete all resources in the namespace and wait until they are gone."""
+        time.sleep(10)
 
-        # Clean up port forwarding
+        ## Clean up port forwarding
         if self.ray_port_forward:
             self.ray_port_forward.terminate()
             print("Ray dashboard port forwarding stopped")

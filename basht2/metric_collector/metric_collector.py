@@ -196,77 +196,17 @@ class MetricCollector:
 
         self.b_f1_Score = best_score
     
-    def _set_ray_f1_score(self):
-        """
-        Get the best validation accuracy from Ray Tune experiment running in Kubernetes.
-        This matches the Optuna experiment's definition of "best score".
-        """
-        try:
-            import subprocess
-            import tempfile
-            import os
-            from ray.tune import ExperimentAnalysis
-    
-            # Find the Ray head pod
-            result = subprocess.run([
-                "kubectl", "get", "pods", "-l", "ray.io/node-type=head",
-                "-o", "jsonpath={.items[0].metadata.name}"
-            ], capture_output=True, text=True, check=True)
-            head_pod = result.stdout.strip()
-            if not head_pod:
-                print("No Ray head pod found")
-                return False
-    
-            print(f"Found Ray head pod: {head_pod}")
-    
-            # Create temporary directory for results
-            with tempfile.TemporaryDirectory() as temp_dir:
-                local_results = os.path.join(temp_dir, "ray_results")
-    
-                # Copy ray_results from pod to local machine
-                cp_result = subprocess.run([
-                    "kubectl", "cp", f"default/{head_pod}:/tmp/ray_results", local_results
-                ], capture_output=True, text=True)
-                if cp_result.returncode != 0:
-                    print(f"Failed to copy ray_results: {cp_result.stderr}")
-                    return False
-    
-                # Find the most recent experiment directory
-                if os.path.exists(local_results):
-                    experiments = [
-                        os.path.join(local_results, d)
-                        for d in os.listdir(local_results)
-                        if os.path.isdir(os.path.join(local_results, d))
-                    ]
-                    if not experiments:
-                        print("No experiments found in ray_results")
-                        return False
-    
-                    latest_experiment = max(experiments, key=os.path.getmtime)
-                    print(f"Found latest experiment: {latest_experiment}")
-    
-                    # Analyze experiment results
-                    analysis = ExperimentAnalysis(latest_experiment)
-                    # Always use val_accuracy for comparability with Optuna
-                    try:
-                        best_trial = analysis.get_best_trial("val_accuracy", mode="max")
-                        if best_trial and "val_accuracy" in best_trial.last_result:
-                            val_acc = best_trial.last_result["val_accuracy"]
-                            print(f"Best val_accuracy: {val_acc:.4f}")
-                            self.b_f1_Score = val_acc
-                            return True
-                        else:
-                            print("val_accuracy not found in best trial results.")
-                            return False
-                    except Exception as e:
-                        print(f"Error extracting val_accuracy: {e}")
-                        return False
-                else:
-                    print("ray_results directory does not exist after copy.")
-                    return False
-        except Exception as e:
-            print(f"Error retrieving Ray validation accuracy: {e}")
-            return False
+    def get_best_val_acc_from_file(self, ray_head_pod):
+        local_path = "/tmp/best_val_accuracy.txt"
+        cp_result = subprocess.run([
+            "kubectl", "cp", f"default/{ray_head_pod}:/tmp/best_val_accuracy.txt", local_path
+        ], capture_output=True, text=True)
+        if cp_result.returncode != 0:
+            print(f"Failed to copy best_val_accuracy.txt: {cp_result.stderr}")
+            return None
+        with open(local_path, "r") as f:
+            acc =  float(f.read().strip())
+        self.b_f1_Score = acc
 
     def _calculate_total_energy(self, step_name, start_time, end_time, duration):
         """Calculate total energy metrics."""

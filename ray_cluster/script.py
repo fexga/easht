@@ -121,7 +121,8 @@ analysis = tune.run(
     config=search_space,
     num_samples=10,
     max_concurrent_trials=3,
-    scheduler=scheduler
+    scheduler=scheduler,
+    storage_path="/tmp/ray_results"
 )
 
 # Print best trial results
@@ -129,4 +130,12 @@ best_trial = analysis.get_best_trial("val_loss", "min")
 print("Best trial config: {}".format(best_trial.config))
 print("Best trial final validation loss: {}".format(best_trial.last_result["val_loss"]))
 print("Best trial final validation accuracy: {}".format(best_trial.last_result["val_accuracy"]))
+
+best_trial = analysis.get_best_trial("val_accuracy", "max")
+best_val_acc = best_trial.last_result["val_accuracy"]
+print(f"BEST_VAL_ACCURACY: {best_val_acc}")
+
+# Optionally, also write to a small file for easy retrieval
+with open("/tmp/best_val_accuracy.txt", "w") as f:
+    f.write(str(best_val_acc))
 
