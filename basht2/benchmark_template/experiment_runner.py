@@ -3,30 +3,28 @@ from abc import ABC, abstractmethod
 from dotenv import load_dotenv, dotenv_values
 import time
 import subprocess
-from kubernetes import client, config, utils, watch
+from kubernetes import client, config, watch
 
 
 
 class Benchmark(ABC):
     """
     This class serves as an Interface for a benchmark. All neccessary methods have to be implemented in the
-    subclass that is using the interface. Make sure to use the predefined static variables. Your benchmark
-    will most likely not run properly if the variables value remains to be "None".
+    subclass that is using the interface. 
     """
 
     @abstractmethod
     def setup(self):
         """
-        Every Operation that is needed before the actual optimization (trial) starts and that is not relevant
-        for starting up workers or the necessary architecture.
+        Every Operation that is needed before the actual optimization (trial) starts.
+
         """
         pass
 
     @abstractmethod
-    def run(self):
+    def trail(self):
         """
             Executing the hyperparameter optimization on the deployed platfrom.
-            use the metrics object to collect and store all measurments on the workers.
         """
         pass
 
@@ -49,49 +47,18 @@ class BenchmarkRunner():
         It is responsibile for setting up everything that is needed upfront to run the benchmark and manages
         recording and saving of benchmark results. It aswell records the Latency of every Step of an
         object that inherits the Benchmark ABC.
-        Before a Benchmark is run seeds are set to ensure identical results for every probabilistic
-        interference.
-
-        On initialization the BenchmarkRunner creates a folder to store results. Benchmark run on tasks, which
-        can be varied. Data and necessary static configurations, that do not affect the Benchmark are loaded
-        with the task.
-
-        Args:
-            benchmark_cls (Benchmark): _description_
-            config (dict): _description_
-            grid (dict): _description_
-            resources (dict): _description_
-            task_str (str, optional): _description_. Defaults to "mnist".
         """
-        # TODO: add a benchmark validator, which checks if things are correctly defined e.g.: helper functions only: "_functionname"
-        # generate a unique name from the config
-        #self.rundate = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        #benchmark_path = os.path.abspath(os.path.dirname(inspect.getabsfile(benchmark_cls)))
-        #self.bench_name = f"{benchmark_cls.__name__}__{name}__"
-        #self.bench_goal = resources.get("goal", "debug")
-        #self.benchmark_folder = os.path.join(benchmark_path, f"benchmark__{self.bench_name}")
-        #self.create_benchmark_folder(self.benchmark_folder)
-        #self.resources = resources
-        #self.workload_definition = resources.get("workload")
-
-        # add input and output size to the benchmark.
         self.benchmark = benchmark_cls
 
-        # set seeds
-        #self._set_all_seeds()
     
 
     def run(self):
         """
-        Runs all functions of a Benchmark and records its latencies. Saves the results afterwards
-        in a predefined folder.
-
-        Raises:
-            ValueError: _description_
+        Runs all functions of a Benchmark and records its latencies. 
         """
 
         self.benchmark.setup()
-        self.benchmark.run()
+        self.benchmark.trail()
         self.benchmark.deprovision()
 
 class HelperFunctions():
@@ -103,17 +70,17 @@ class HelperFunctions():
         self.apps_v1 = client.AppsV1Api()
         self.batch_v1 = client.BatchV1Api()
 
-    def _build_docker_image(self, image_name, dockerfile_path=None):
+    def build_docker_image(self, image_name, dockerfile_path=None):
         if dockerfile_path is None:
             dockerfile_path = os.path.join(os.path.dirname(__file__))
         command = f"docker build -t {image_name} {dockerfile_path}"
         subprocess.run(command, shell=True, check=True)
 
-    def _load_docker_image_into_kind(self, image_name, ):
+    def load_docker_image_into_kind(self, image_name, ):
         command = f"kind load docker-image {image_name} --name kind"
         subprocess.run(command, shell=True, check=True)
 
-    def _create_configmap_from_env(self, env_file_path, configmap_name):
+    def create_configmap_from_env(self, env_file_path, configmap_name):
         """
         Create a Kubernetes ConfigMap from a .env file.
 
@@ -170,7 +137,7 @@ class HelperFunctions():
 
         print(f"Generated {output_path} with PARALLELISM={parallelism}, CPU={pod_cpu}m, Memory={pod_memory}Mi")
 
-    def _wait_for_pods_ready(self, label_selector, number_jobs, target_phase):
+    def wait_for_pods_ready(self, label_selector, number_jobs, target_phase):
         """
         Wait for pods matching the label selector to reach the target phase.
 
@@ -226,7 +193,7 @@ class HelperFunctions():
         print(f"Training job monitoring completed after {elapsed:.1f} seconds")
         print(f"Completed pods: {len(completed_pods)}/{expected_completions}")
 
-    def _delete_all_resources_in_namespace(self):
+    def delete_all_resources_in_namespace(self):
         """
         Delete all resources in the specified Kubernetes namespace.
 

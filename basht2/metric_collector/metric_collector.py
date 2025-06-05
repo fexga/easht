@@ -8,9 +8,7 @@ from kubernetes import client, config
 import optuna
 import subprocess
 from datetime import datetime
-from ray.tune import ExperimentAnalysis
 import os
-import ray
 
 
 class MetricCollector:
@@ -35,7 +33,7 @@ class MetricCollector:
         self.electricitymap_token = electricitymap_token
         self.metrics = {"steps": {}}
         self.timestamps = {}
-        self.b_f1_Score = 0
+        self.best_trial = 0
         self.experiment_vars = experiment_vars
         
         env_file_path = os.path.join(os.getcwd(), ".env")
@@ -43,7 +41,7 @@ class MetricCollector:
         print(f"Loaded .env file from: {env_file_path}")
         print(f"Environment variables: {self.env_vars}")
         
-    def measure_power(aggregation_method='sum'):
+    def measure_power(aggregation_method='invrease'):
         def decorator(method):
             @functools.wraps(method)
             def wrapper(self, *args, **kwargs):
@@ -112,8 +110,6 @@ class MetricCollector:
 
                 self._calculate_network_metrics_increase(step_name, start_time, end_time, duration)
 
-            
-
         self._calculate_totals()
 
         self._calculate_epoch_metrics()
@@ -122,22 +118,22 @@ class MetricCollector:
 
         self._add_hardware_info_to_meta()
 
-        self.calculate_overall_metrics()
+        self._calculate_overall_metrics()
 
 
         
     def _calculate_epoch_metrics(self):
         """
         Calculate adjusted energy consumption based on the number of epochs.
-        Formula: (number of epochs / 1000) * energy consumption of the 'run' step.
+        Formula: (number of epochs / 1000) * energy consumption of the 'trail' step.
         """
         # Load the number of epochs from the .env file
         epochs = int(os.getenv("EPOCHS"))  # Default to 1 if not set
 
-        # Ensure the 'run' step metrics exist
-        if "total_energy_kwh" in self.metrics["steps"]["run"]:
-            total_kwh = self.metrics["steps"]["run"]["total_energy_kwh"]
-            total_energy_cf = self.metrics["steps"]["run"]["total_energy_cf"]
+        # Ensure the 'trail' step metrics exist
+        if "total_energy_kwh" in self.metrics["steps"]["trail"]:
+            total_kwh = self.metrics["steps"]["trail"]["total_energy_kwh"]
+            total_energy_cf = self.metrics["steps"]["trail"]["total_energy_cf"]
 
             # Calculate adjusted energy
             energy_per_1000epochs = (1000 / epochs) * total_kwh
@@ -154,7 +150,7 @@ class MetricCollector:
             print(f"kwh_1000epochs saved in 'meta': {energy_per_1000epochs:.2f} joules")
             print(f"carbon_footprint_1000epochs saved in 'meta': {cf_per_1000epochs:.4f} kgCO2e")
         else:
-            print("Metrics for 'run' step or 'total_energy_kwh' not found.")
+            print("Metrics for 'trail' step or 'total_energy_kwh' not found.")
 
     def _add_env_to_meta(self):
         """
@@ -177,37 +173,6 @@ class MetricCollector:
 
         print(f"Added all environment variables to 'meta': {self.metrics['meta']}")
 
-    def _set_f1_score(self):
-        node_ip = self.get_node_ip()
-
-        # Retrieve the best score from the Optuna database
-        study = optuna.create_study(
-            study_name="k8s_mlflow",
-            storage=f"postgresql://optuna:superSecretPassword@{node_ip}:30032/optunaDatabase",
-            load_if_exists=True
-        )
-         
-
-        time.sleep(20)
-        
-        best_trial = study.best_trial
-        best_score = best_trial.value  # Best validation accuracy or F1 score 
-
-
-        self.b_f1_Score = best_score
-    
-    def get_best_val_acc_from_file(self, ray_head_pod):
-        local_path = "/tmp/best_val_accuracy.txt"
-        cp_result = subprocess.run([
-            "kubectl", "cp", f"default/{ray_head_pod}:/tmp/best_val_accuracy.txt", local_path
-        ], capture_output=True, text=True)
-        if cp_result.returncode != 0:
-            print(f"Failed to copy best_val_accuracy.txt: {cp_result.stderr}")
-            return None
-        with open(local_path, "r") as f:
-            acc =  float(f.read().strip())
-        self.b_f1_Score = acc
-
     def _calculate_total_energy(self, step_name, start_time, end_time, duration):
         """Calculate total energy metrics."""
         start_total = self._get_energy_at_timestamp(start_time, 'total')
@@ -222,19 +187,16 @@ class MetricCollector:
 
         if end_total is not None and start_total is not None:
             energy_consumed = end_total - start_total
-            avg_power = energy_consumed / duration if duration > 0 else 0
-            total_kwh = self.joules_to_kwh(energy_consumed)
+            total_kwh = self._joules_to_kwh(energy_consumed)
             carbon_intensity = self._get_carbon_intensity()
             total_cf = total_kwh * carbon_intensity
         elif end_total is not None and start_total is None:
             energy_consumed = end_total - 0
-            avg_power = energy_consumed / duration if duration > 0 else 0
-            total_kwh = self.joules_to_kwh(energy_consumed)
+            total_kwh = self._joules_to_kwh(energy_consumed)
             carbon_intensity = self._get_carbon_intensity()
             total_cf = total_kwh * carbon_intensity
         else:
             energy_consumed = 0
-            avg_power = 0
             total_kwh = 0
             total_cf = 0
 
@@ -259,19 +221,16 @@ class MetricCollector:
 
         if end_cpu is not None and start_cpu is not None:
             cpu_energy = end_cpu - start_cpu
-            avg_cpu_power = cpu_energy / duration if duration > 0 else 0
-            cpu_kwh = self.joules_to_kwh(cpu_energy)
+            cpu_kwh = self._joules_to_kwh(cpu_energy)
             carbon_intensity = self._get_carbon_intensity()
             cpu_cf = cpu_kwh * carbon_intensity
         elif end_cpu is not None and start_cpu is None:
             cpu_energy = end_cpu - 0
-            avg_cpu_power = cpu_energy / duration if duration > 0 else 0
-            cpu_kwh = self.joules_to_kwh(cpu_energy)
+            cpu_kwh = self._joules_to_kwh(cpu_energy)
             carbon_intensity = self._get_carbon_intensity()
             cpu_cf = cpu_kwh * carbon_intensity
         else:
             cpu_energy = 0
-            avg_cpu_power = 0
             cpu_kwh = 0
             cpu_cf = 0
 
@@ -296,19 +255,16 @@ class MetricCollector:
 
         if end_dram is not None and start_dram is not None:
             dram_energy = end_dram - start_dram
-            avg_dram_power = dram_energy / duration if duration > 0 else 0
-            dram_kwh = self.joules_to_kwh(dram_energy)
+            dram_kwh = self._joules_to_kwh(dram_energy)
             carbon_intensity = self._get_carbon_intensity()
             dram_cf = dram_kwh * carbon_intensity
         elif end_dram is not None and start_dram is None:
             dram_energy = end_dram - 0
-            avg_dram_power = dram_energy / duration if duration > 0 else 0
-            dram_kwh = self.joules_to_kwh(dram_energy)
+            dram_kwh = self._joules_to_kwh(dram_energy)
             carbon_intensity = self._get_carbon_intensity()
             dram_cf = dram_kwh * carbon_intensity
         else:
             dram_energy = 0
-            avg_dram_power = 0
             dram_kwh = 0
             dram_cf = 0
 
@@ -327,19 +283,16 @@ class MetricCollector:
 
         if end_gpu is not None and start_gpu is not None:
             gpu_energy = end_gpu - start_gpu
-            avg_gpu_power = gpu_energy / duration if duration > 0 else 0
-            gpu_kwh = self.joules_to_kwh(gpu_energy)
+            gpu_kwh = self._joules_to_kwh(gpu_energy)
             carbon_intensity = self._get_carbon_intensity()
             gpu_cf = gpu_kwh * carbon_intensity
         elif end_gpu is not None and start_gpu is None:
             gpu_energy = end_gpu - 0
-            avg_gpu_power = gpu_energy / duration if duration > 0 else 0
-            gpu_kwh = self.joules_to_kwh(gpu_energy)
+            gpu_kwh = self._joules_to_kwh(gpu_energy)
             carbon_intensity = self._get_carbon_intensity()
             gpu_cf = gpu_kwh * carbon_intensity
         else:
             gpu_energy = 0
-            avg_gpu_power = 0
             gpu_kwh = 0
             gpu_cf = 0
 
@@ -458,12 +411,11 @@ class MetricCollector:
             total_receive_kwh += step_metrics['network_receive_bytes']
 
 
-
-
         # Aggregate total process time
             total_process_time += step_metrics['duration_seconds']
 
-        f1_score = self.b_f1_Score
+
+        best_trial = self.best_trial
 
         # Update the total metrics in self.metrics
         self.metrics['total'] = {
@@ -478,7 +430,7 @@ class MetricCollector:
             'gpu_energy_cf': total_gpu_cf,
             'network_transmit_bytes': total_transmit_kwh,
             'network_receive_bytes': total_receive_kwh,
-            'f1_score': f1_score
+            'best_trial': best_trial
         }
 
         print(f"Total metrics calculated: {self.metrics['total']}")
@@ -495,7 +447,7 @@ class MetricCollector:
 
         if total_increase is not None:
             avg_power = total_increase / duration if duration > 0 else 0
-            total_kwh = self.joules_to_kwh(total_increase)
+            total_kwh = self._joules_to_kwh(total_increase)
             carbon_intensity = self._get_carbon_intensity()
             total_cf = total_kwh * carbon_intensity
         else:
@@ -522,7 +474,7 @@ class MetricCollector:
 
         if cpu_increase is not None:
             avg_power = cpu_increase / duration if duration > 0 else 0
-            cpu_kwh = self.joules_to_kwh(cpu_increase)
+            cpu_kwh = self._joules_to_kwh(cpu_increase)
             carbon_intensity = self._get_carbon_intensity()
             cpu_cf = cpu_kwh * carbon_intensity
         else:
@@ -548,7 +500,7 @@ class MetricCollector:
     
         if dram_increase is not None:
             avg_power = dram_increase / duration if duration > 0 else 0
-            dram_kwh = self.joules_to_kwh(dram_increase)
+            dram_kwh = self._joules_to_kwh(dram_increase)
             carbon_intensity = self._get_carbon_intensity()
             dram_cf = dram_kwh * carbon_intensity
         else:
@@ -574,7 +526,7 @@ class MetricCollector:
     
         if gpu_increase is not None:
             avg_power = gpu_increase / duration if duration > 0 else 0
-            gpu_kwh = self.joules_to_kwh(gpu_increase)
+            gpu_kwh = self._joules_to_kwh(gpu_increase)
             carbon_intensity = self._get_carbon_intensity()
             gpu_cf = gpu_kwh * carbon_intensity
         else:
@@ -626,151 +578,6 @@ class MetricCollector:
                 'network_transmit_bytes': transmit_packets
             })
             print(f"Network transmit bytes for {step_name}: {transmit_packets}")
-
-    '''
-    def _calculate_total_rate(self, step_name, start_time, end_time, duration):
-        """Calculate total energy metrics using the rate function over a time range."""
-        total_rate = self._get_energy_rate_in_range('total', start_time, end_time, duration)
-        print(f"Total energy rate for {step_name}: {total_rate}")
-
-        if "steps" not in self.metrics:
-            self.metrics["steps"] = {}
-
-        if step_name not in self.metrics["steps"]:
-            self.metrics["steps"][step_name] = {'duration_seconds': duration}
-
-        if total_rate is not None:
-            total_kwh = self.watts_to_kwh(total_rate, duration)
-            carbon_intensity = self._get_carbon_intensity()
-            total_cf = total_kwh * carbon_intensity
-        else:
-            total_rate = 0
-            total_kwh = 0
-            total_cf = 0 
-
-        self.metrics["steps"][step_name].update({
-            'total_energy_rate': total_rate,
-            'total_energy_kwh': total_kwh,
-            'total_energy_cf': total_cf
-        })
-
-    def _calculate_cpu_rate(self, step_name, start_time, end_time, duration):
-        """Calculate CPU energy metrics using the rate function over a time range."""
-        cpu_rate = self._get_energy_rate_in_range('cpu', start_time, end_time, duration)
-        print(f"CPU energy rate for {step_name}: {cpu_rate}")
-
-        if "steps" not in self.metrics:
-            self.metrics["steps"] = {}
-
-        if step_name not in self.metrics["steps"]:
-            self.metrics["steps"][step_name] = {'duration_seconds': duration}
-
-        if cpu_rate is not None:
-            cpu_kwh = self.watts_to_kwh(cpu_rate, duration)
-            carbon_intensity = self._get_carbon_intensity()
-            cpu_cf = cpu_kwh * carbon_intensity
-        else:
-            cpu_rate = 0
-            cpu_kwh = 0
-            cpu_cf = 0
-
-        self.metrics["steps"][step_name].update({
-            'avg_cpu_power_watts': cpu_rate,
-            'cpu_energy_kwh': cpu_kwh,
-            'cpu_energy_cf': cpu_cf
-        })
-
-    def _calculate_dram_rate(self, step_name, start_time, end_time, duration):
-        """Calculate DRAM energy metrics using the rate function over a time range."""
-        dram_rate = self._get_energy_rate_in_range('dram', start_time, end_time, duration)
-        print(f"DRAM energy rate for {step_name}: {dram_rate}")
-
-        if "steps" not in self.metrics:
-            self.metrics["steps"] = {}
-    
-        if step_name not in self.metrics["steps"]:
-            self.metrics["steps"][step_name] = {'duration_seconds': duration}
-    
-        if dram_rate is not None:
-            dram_kwh = self.watts_to_kwh(dram_rate, duration)
-            carbon_intensity = self._get_carbon_intensity()
-            dram_cf = dram_kwh * carbon_intensity
-        else:
-            dram_rate = 0
-            dram_kwh = 0
-            dram_cf = 0
-    
-        self.metrics["steps"][step_name].update({
-            'avg_dram_power_watts': dram_rate,
-            'dram_energy_kwh': dram_kwh,
-            'dram_energy_cf': dram_cf
-        })
-    
-    def _calculate_gpu_rate(self, step_name, start_time, end_time, duration):
-        """Calculate DRAM energy metrics using the rate function over a time range."""
-        gpu_rate = self._get_energy_rate_in_range('gpu', start_time, end_time, duration)
-        print(f"DRAM energy rate for {step_name}: {gpu_rate}")
-
-        if "steps" not in self.metrics:
-            self.metrics["steps"] = {}
-    
-        if step_name not in self.metrics["steps"]:
-            self.metrics["steps"][step_name] = {'duration_seconds': duration}
-    
-        if gpu_rate is not None:
-            gpu_kwh = self.watts_to_kwh(gpu_rate, duration)
-            carbon_intensity = self._get_carbon_intensity()
-            gpu_cf = gpu_kwh * carbon_intensity
-        else:
-            gpu_rate = 0
-            gpu_kwh = 0
-            gpu_cf = 0
-    
-        self.metrics["steps"][step_name].update({
-            'avg_gpu_power_watts': gpu_rate,
-            'gpu_energy_kwh': gpu_kwh,
-            'gpu_energy_cf': gpu_cf
-        })
-
-    #non-functional
-    def _calculate_network_metrics_rate(self, step_name, start_time, end_time, duration):
-        """Calculate network metrics (transmit and receive packets)."""
-        transmit = self._get_energy_rate_in_range('network_transmit', start_time, end_time, duration)
-        receive = self._get_energy_rate_in_range('network_receive', start_time, end_time, duration)
-    
-
-        if "steps" not in self.metrics:
-            self.metrics["steps"] = {}
-
-        if step_name not in self.metrics["steps"]:
-            self.metrics["steps"][step_name] = {'duration_seconds': duration}
-
-        if receive is not None:
-            receive_packets = receive * duration
-            self.metrics["steps"][step_name].update({
-                'network_receive_bytes': receive_packets
-            })
-            print(f"Network receive bytes for {step_name}: {receive_packets}")
-        else:
-            receive_packets = 0
-            self.metrics["steps"][step_name].update({
-                'network_receive_bytes': receive_packets
-            })
-            print(f"Network receive bytes for {step_name}: {receive_packets}")
-        
-        if transmit is not None:
-            transmit_packets = transmit * duration
-            self.metrics["steps"][step_name].update({
-                'network_transmit_bytes': transmit_packets
-            })
-            print(f"Network transmit bytes for {step_name}: {transmit_packets}")
-        else:
-            transmit_packets = 0
-            self.metrics["steps"][step_name].update({
-                'network_transmit_bytes': transmit_packets
-            })
-            print(f"Network transmit bytes for {step_name}: {transmit_packets}")
-    '''
 
     def _get_energy_at_timestamp(self, timestamp, energy_type='total'):
         """Query Prometheus for energy values at a specific timestamp"""
@@ -844,52 +651,8 @@ class MetricCollector:
         except Exception as e:
             print(f"Error querying Prometheus for {energy_type} energy")
             return None
-        
-    '''
-    def _get_energy_rate_in_range(self, energy_type, start_time, end_time, duration):
-        """Query Prometheus for energy rates within a specific time range."""
-        try:
-            # Determine query based on energy type
-            if energy_type == 'total':
-                query = f'rate(kepler_container_joules_total{{container_namespace="default"}}[{int(duration)}s])'
-            elif energy_type == 'cpu':
-                query = f'rate(kepler_container_core_joules_total{{container_namespace="default"}}[{int(duration)}s])'
-            elif energy_type == 'dram':
-                query = f'rate(kepler_container_dram_joules_total{{container_namespace="default"}}[{int(duration)}s])'
-            elif energy_type == 'network_transmit':
-                query = f'rate(container_network_transmit_bytes_total{{container_namespace="default"}}[{int(duration)}s])'
-            elif energy_type == 'network_receive':
-                query = f'rate(container_network_receive_bytes_total{{container_namespace="default"}}[{int(duration)}s])'
-            elif energy_type == 'gpu':
-                query = f'rate(kepler_container_gpu_joules_total{{container_namespace="default"}}[{int(duration)}s])'
-            else:
-                raise ValueError(f"Unknown energy type: {energy_type}")
-
-            # Query Prometheus
-            response = requests.get(
-                self.prometheus_url,  # Use the base URL without appending /api/v1/query again
-                params={"query": query, 'time': end_time}
-            )
-
-            # Print the raw response for debugging
-            print(f"Prometheus response for {energy_type}: {response.text}")
-
-            # Parse the JSON response
-            response.raise_for_status()
-            result = response.json()
-
-            # Extract and aggregate the rate values
-            if 'data' in result and 'result' in result['data'] and result['data']['result']:
-                value = float(result['data']['result'][0]['value'][1])
-                return value
-            return None
-
-        except Exception as e:
-            print(f"Error querying Prometheus for {energy_type} rate in range: {e}")
-            return None
-    '''
     
-    def calculate_overall_metrics(self):
+    def _calculate_overall_metrics(self):
         """Calculate overall metrics for the entire experiment duration using the increase method."""
         if not self.timestamps:
             print("No step timestamps found.")
@@ -914,17 +677,11 @@ class MetricCollector:
         tx_bytes = self._get_energy_increase_at_timestamp('network_transmit', start_time, end_time, duration)
         rx_bytes = self._get_energy_increase_at_timestamp('network_receive', start_time, end_time, duration)
 
-        # Averages
-        avg_power = total_joules / duration if (duration > 0 and total_joules is not None) else 0
-        avg_cpu_power = cpu_joules / duration if (duration > 0 and cpu_joules is not None) else 0
-        avg_dram_power = dram_joules / duration if (duration > 0 and dram_joules is not None) else 0
-        avg_gpu_power = gpu_joules / duration if (duration > 0 and gpu_joules is not None) else 0
-
         # Convert to kWh
-        total_kwh = self.joules_to_kwh(total_joules) if total_joules is not None else 0
-        cpu_kwh = self.joules_to_kwh(cpu_joules) if cpu_joules is not None else 0
-        dram_kwh = self.joules_to_kwh(dram_joules) if dram_joules is not None else 0
-        gpu_kwh = self.joules_to_kwh(gpu_joules) if gpu_joules is not None else 0
+        total_kwh = self._joules_to_kwh(total_joules) if total_joules is not None else 0
+        cpu_kwh = self._joules_to_kwh(cpu_joules) if cpu_joules is not None else 0
+        dram_kwh = self._joules_to_kwh(dram_joules) if dram_joules is not None else 0
+        gpu_kwh = self._joules_to_kwh(gpu_joules) if gpu_joules is not None else 0
 
         # Carbon intensity
         carbon_intensity = self._get_carbon_intensity()
@@ -934,7 +691,7 @@ class MetricCollector:
         gpu_cf = gpu_kwh * carbon_intensity
 
         # Store in metrics["overall_increase"]
-        self.metrics["overall_increase"] = {
+        self.metrics["overall_increase_validation"] = {
             "duration_seconds": duration,
             "total_energy_kwh": total_kwh,
             "total_energy_cf": total_cf,
@@ -951,7 +708,7 @@ class MetricCollector:
             "network_transmit_bytes": tx_bytes if tx_bytes is not None else 0,
             "network_receive_bytes": rx_bytes if rx_bytes is not None else 0
         }
-        print(f"Overall metrics (increase): {self.metrics['overall_increase']}")
+        print(f"Overall metrics (increase): {self.metrics['overall_increase_validation']}")
         
     def _add_hardware_info_to_meta(self):
         """
@@ -988,12 +745,12 @@ class MetricCollector:
         self.metrics["meta"]["hardware_info"] = hardware_info
         print(f"Added hardware information to 'meta': {hardware_info}")
 
-    def joules_to_kwh(self, joules):
+    def _joules_to_kwh(self, joules):
         """Convert energy from joules to kilowatt-hours"""
         # 1 kWh = 3,600,000 joules
         return joules / 3_600_000
     
-    def watts_to_kwh(self, watts, duration_seconds):
+    def _watts_to_kwh(self, watts, duration_seconds):
         """Convert power in watts to energy in kilowatt-hours over a given duration."""
         # Convert duration from seconds to hours
         duration_hours = duration_seconds / 3600
@@ -1016,7 +773,7 @@ class MetricCollector:
 
         return data.get("carbonIntensity")
     
-    def get_node_ip(self):
+    def _get_node_ip(self):
         # Load Kubernetes configuration
         config.load_kube_config()
 
@@ -1083,3 +840,39 @@ class MetricCollector:
             print(f"Snapshot copied to {local_path}")
         except Exception as e:
             print(f"Error copying snapshot: {e}")
+
+    def get_optimized_score_optuna(self):
+        node_ip = self._get_node_ip()
+
+        # Retrieve the best trial from the Optuna database
+        study = optuna.create_study(
+            study_name="k8s_mlflow",
+            storage=f"postgresql://optuna:superSecretPassword@{node_ip}:30032/optunaDatabase",
+            load_if_exists=True
+        )
+         
+
+        time.sleep(20)
+        
+        best_trial = study.best_trial
+        best_score = best_trial.value 
+
+
+        self.b_f1_Score = best_score
+    
+    def get_optimized_score_raytune(self, ray_head_pod):
+        # Retrieve the best trial from the Ray Tune analysis
+        # Assuming the Ray Tune analysis is stored in a directory named "/tmp/best_val_accuracy.txt", needs to be configured manually
+        local_path = "/tmp/best_val_accuracy.txt"
+        cp_result = subprocess.run([
+            "kubectl", "cp", f"default/{ray_head_pod}:/tmp/best_val_accuracy.txt", local_path
+        ], capture_output=True, text=True)
+        if cp_result.returncode != 0:
+            print(f"Failed to copy best_val_accuracy.txt: {cp_result.stderr}")
+            return None
+        with open(local_path, "r") as f:
+            acc =  float(f.read().strip())
+        self.best_trial = acc
+
+
+    

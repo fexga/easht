@@ -4,7 +4,7 @@ import subprocess
 import socket
 from basht2.metric_collector.metric_collector import MetricCollector
 import time
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 from ray.job_submission import JobSubmissionClient
 
 from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, HelperFunctions
@@ -20,7 +20,6 @@ class OptunaBenchmark(Benchmark, MetricCollector):
     @MetricCollector.measure_power(aggregation_method='increase')
     def setup(self):
         config.load_kube_config()
-        k8s_client = client.ApiClient()
 
         kuberay_dir = os.path.join(os.path.dirname(__file__), 'kuberay-manifests/default')
         os.makedirs(kuberay_dir, exist_ok=True)
@@ -40,7 +39,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
         # Wait for Operator pod to be running
         print("Waiting for Operator pod to be ready...")
-        helper._wait_for_pods_ready(label_selector="app.kubernetes.io/component=kuberay-operator", number_jobs=1,  target_phase="Running")
+        helper.wait_for_pods_ready(label_selector="app.kubernetes.io/component=kuberay-operator", number_jobs=1,  target_phase="Running")
         print("Operator deployment complete!")
 
         print(f"Waiting 5 additional seconds for services to initialize...")
@@ -57,8 +56,8 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         )
 
         print("Waiting for Ray Cluster to be ready...")
-        helper._wait_for_pods_ready(label_selector="ray.io/node-type=head", number_jobs=1,  target_phase="Running")
-        helper._wait_for_pods_ready(label_selector="ray.io/node-type=worker", number_jobs=2,  target_phase="Running")
+        helper.wait_for_pods_ready(label_selector="ray.io/node-type=head", number_jobs=1,  target_phase="Running")
+        helper.wait_for_pods_ready(label_selector="ray.io/node-type=worker", number_jobs=2,  target_phase="Running")
         print("Ray Cluster deployment complete!")
 
         # Start port forwarding
@@ -86,7 +85,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         print("Study setup complete!")
 
     @MetricCollector.measure_power(aggregation_method='increase')
-    def run(self):
+    def trail(self):
 
         ray_address = os.environ.get("RAY_ADDRESS", "http://127.0.0.1:8265")
         client = JobSubmissionClient(ray_address)
@@ -125,7 +124,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):
-        self.get_best_val_acc_from_file("raycluster-head")
+        self.get_optimized_score_raytune("raycluster-head")
         """Delete all resources in the namespace and wait until they are gone."""
         time.sleep(10)
 
@@ -134,25 +133,21 @@ class OptunaBenchmark(Benchmark, MetricCollector):
             self.ray_port_forward.terminate()
             print("Ray dashboard port forwarding stopped")
     
-        helper._delete_all_resources_in_namespace()
+        helper.delete_all_resources_in_namespace()
         print(f"Waiting 5 additional seconds for services to undeploy...")
         time.sleep(5)
     
 def main():
-    
-    # Set up port forwarding to Prometheus
+
+    # Load environment variables from .env file
     env_file_path = os.path.join(os.path.dirname(__file__), ".env")
     load_dotenv(env_file_path)
 
-    #worker_template_path = os.path.join(os.path.dirname(__file__), "worker.yaml.template")
-    #worker_yaml_path = os.path.join(os.path.dirname(__file__), "worker.yaml")
-    #helper.generate_worker_yaml_from_env(env_file_path, worker_template_path, worker_yaml_path)
-
-    # Create the ConfigMap from the .env file
-    #helper._create_configmap_from_env(env_file_path, configmap_name="training-config")
+    worker_template_path = os.path.join(os.path.dirname(__file__), "raycluster.yaml.template")
+    worker_yaml_path = os.path.join(os.path.dirname(__file__), "raycluster.yaml")
+    helper.generate_worker_yaml_from_env(env_file_path, worker_template_path, worker_yaml_path)
     
     # Set up port forwarding to Prometheus
-    
     prometheus_process = subprocess.Popen(
         ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],
         stdout=subprocess.PIPE,
@@ -166,10 +161,6 @@ def main():
     
     
     try:
-        #optuna_path = os.path.dirname(__file__)
-        #helper._build_docker_image("optuna-kubernetes-mlflow3:example", dockerfile_path=optuna_path)
-        #helper._load_docker_image_into_kind("optuna-kubernetes-mlflow3:example")
-
         ob = OptunaBenchmark()
 
         runner = BenchmarkRunner(benchmark_cls=ob)
