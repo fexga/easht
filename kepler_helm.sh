@@ -9,6 +9,7 @@ echo "Installing Kepler with custom values..."
 helm install kepler kepler/kepler \
     --namespace kepler \
     --create-namespace \
+    #--set extraEnvVars.POWER_EXPORTER=powertop
     #--set serviceMonitor.enabled=true \
     #--set serviceMonitor.labels.release=prometheus \
 
