@@ -41,7 +41,7 @@ class MetricCollector:
         print(f"Loaded .env file from: {env_file_path}")
         print(f"Environment variables: {self.env_vars}")
         
-    def measure_power(aggregation_method='invrease'):
+    def measure_power(aggregation_method='increase'):
         def decorator(method):
             @functools.wraps(method)
             def wrapper(self, *args, **kwargs):

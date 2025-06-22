@@ -75,6 +75,30 @@ class HelperFunctions():
             dockerfile_path = os.path.join(os.path.dirname(__file__))
         command = f"docker build -t {image_name} {dockerfile_path}"
         subprocess.run(command, shell=True, check=True)
+    
+    def build_and_push_image(self, image_name, dockerfile_dir, registry_url, username):
+        """
+        Build and push a Docker image to a remote registry.
+
+        Args:
+            image_name (str): The name/tag for the image (e.g., "optuna-kubernetes-mlflow3:example").
+            dockerfile_dir (str): Directory containing the Dockerfile.
+            registry_url (str): Registry URL (e.g., "docker.io" for Docker Hub).
+            username (str): Your registry username.
+        """
+        # Full image path
+        full_image = f"{registry_url}/{username}/{image_name}"
+
+        # Build the image
+        print(f"Building Docker image: {full_image}")
+        subprocess.run(["docker", "build", "-t", full_image, dockerfile_dir], check=True)
+
+        # Push the image
+        print(f"Pushing Docker image: {full_image}")
+        subprocess.run(["docker", "push", full_image], check=True)
+
+        print("Build and push complete!")
+        return full_image
 
     def load_docker_image_into_kind(self, image_name, ):
         command = f"kind load docker-image {image_name} --name kind"

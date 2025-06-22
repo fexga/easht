@@ -1,0 +1,46 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: raycluster
+spec:
+  # Head node specification
+  headGroupSpec:
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+      block: "true"
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: rayproject/ray:latest
+          ports:
+          - containerPort: 6379  # Ray internal communication
+          - containerPort: 8265  # Ray dashboard
+          - containerPort: 10001 # Ray client server
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+  
+  # Worker nodes specification
+  workerGroupSpecs:
+  - groupName: small-workers
+    replicas: 2  # Number of worker pods
+    minReplicas: 2
+    maxReplicas: 2  # For autoscaling
+    rayStartParams: {}
+    template:
+      spec:
+        containers:
+        - name: ray-worker
+          image: rayproject/ray:latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: "2"
+            requests:
+              cpu: "1"
+              memory: "2"
