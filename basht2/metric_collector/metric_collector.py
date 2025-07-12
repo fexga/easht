@@ -22,7 +22,7 @@ class MetricCollector:
         "ACCELERATOR_TYPE",
         "ACCELERATOR_MEMORY",
         "DATA_LOADING_METHOD",
-        "BATCH_SIZE",
+        "BATCHSIZE",
         "WORKER_NODE_SYNC",
         "COMP_DISTRIBUTION",
         "HPO_FRAMEWORK",

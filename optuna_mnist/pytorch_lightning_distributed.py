@@ -1,5 +1,6 @@
 import os
 
+from optuna.integration import PyTorchLightningPruningCallback
 import lightning.pytorch as pl
 from lightning.pytorch import Callback
 import optuna
@@ -12,9 +13,7 @@ from torchvision import datasets
 from torchvision import transforms
 
 
-PERCENT_VALID_EXAMPLES = float(os.environ["PERCENT_VALID_EXAMPLES"])
 BATCHSIZE = int(os.environ["BATCHSIZE"])
-CLASSES = int(os.environ["CLASSES"])
 EPOCHS = int(os.environ["EPOCHS"])
 DIR = os.getcwd()
 MODEL_DIR = os.path.join(DIR, "result")
@@ -36,13 +35,13 @@ def create_model(trial):
     layers = []
 
     for i in range(n_layers):
-        output_dim = int(trial.suggest_float("n_units_l{}".format(i), 4, 128))
+        output_dim = trial.suggest_categorical(f"n_units_l{i}", [32, 64, 128])
         layers.append(nn.Linear(input_dim, output_dim))
         layers.append(nn.ReLU())
         layers.append(nn.Dropout(dropout))
         input_dim = output_dim
 
-    layers.append(nn.Linear(input_dim, CLASSES))
+    layers.append(nn.Linear(input_dim, 10)) 
     layers.append(nn.LogSoftmax(dim=1))
     model = nn.Sequential(*layers)
 
@@ -100,13 +99,13 @@ class LightningNet(pl.LightningModule):
 def objective(trial):
     
         metrics_callback = MetricsCallback()
+        pruning_callback = PyTorchLightningPruningCallback(trial, monitor="val_acc")
         trainer = pl.Trainer(
             logger=False,
-            limit_val_batches=PERCENT_VALID_EXAMPLES,
             enable_checkpointing=False,
             max_epochs=EPOCHS,
             accelerator="cpu",
-            callbacks=[metrics_callback],
+            callbacks=[metrics_callback, pruning_callback]
         )
 
         model = LightningNet(trial)
@@ -116,6 +115,8 @@ def objective(trial):
 
 
 if __name__ == "__main__":
+    pruner = optuna.pruners.MedianPruner()
+    sampler = optuna.samplers.RandomSampler()
     study = optuna.load_study(
         study_name="k8s_mlflow",
         storage="postgresql://{}:{}@postgres:5432/{}".format(
@@ -123,6 +124,8 @@ if __name__ == "__main__":
             os.environ["POSTGRES_PASSWORD"],
             os.environ["POSTGRES_DB"],
         ),
+        sampler=sampler,
+        pruner=pruner,
     )
     study.optimize(
         objective,

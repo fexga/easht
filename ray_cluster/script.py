@@ -4,12 +4,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as dt
 import torchvision.transforms as transforms
-from torchvision.datasets import MNIST
+from torchvision.datasets import FashionMNIST
 import ray
 from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 import pytorch_lightning as pl
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
+from ray.tune.schedulers import MedianStoppingRule
 
 # Get settings from environment variables or use defaults
 #BATCHSIZE = int(os.environ.get("BATCHSIZE", "128"))
@@ -69,12 +70,12 @@ class LightningMNISTModel(pl.LightningModule):
     
     def train_dataloader(self):
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-        train_dataset = MNIST(root="/tmp/data", train=True, transform=transform, download=True)
+        train_dataset = FashionMNIST(root="/tmp/data", train=True, transform=transform, download=True)
         return dt.DataLoader(dataset=train_dataset, batch_size=128, shuffle=True)
     
     def val_dataloader(self):
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-        val_dataset = MNIST(root="/tmp/data", train=False, transform=transform, download=True)
+        val_dataset = FashionMNIST(root="/tmp/data", train=False, transform=transform, download=True)
         return dt.DataLoader(dataset=val_dataset, batch_size=128)
 
 
@@ -106,13 +107,11 @@ search_space = {
     "optimizer": tune.choice(["Adam", "RMSprop", "SGD"])
 }
 
-scheduler = ASHAScheduler(
-    metric="val_loss",  # Using validation loss for early stopping
+scheduler = MedianStoppingRule(
+    metric="val_loss",
     mode="min",
-    max_t=1,
     grace_period=1,
-    reduction_factor=2,
-    brackets=1
+    min_samples_required=3
 )
 
 analysis = tune.run(

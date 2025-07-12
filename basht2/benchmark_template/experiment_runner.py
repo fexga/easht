@@ -50,8 +50,6 @@ class BenchmarkRunner():
         """
         self.benchmark = benchmark_cls
 
-    
-
     def run(self):
         """
         Runs all functions of a Benchmark and records its latencies. 
@@ -266,7 +264,6 @@ class HelperFunctions():
         "ACCELERATOR_TYPE",
         "ACCELERATOR_MEMORY",
         "DATA_LOADING_METHOD",
-        "BATCH_SIZE",
         "WORKER_NODE_SYNC",
         "COMP_DISTRIBUTION",
         "HPO_FRAMEWORK",

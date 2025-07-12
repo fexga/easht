@@ -15,15 +15,15 @@ helm install kepler kepler/kepler \
 # service monitor seperate deployment
 
 
-echo "Waiting for Kepler pod to be ready..."
-KPLR_POD=$(
-    kubectl get pod \
-        -l app.kubernetes.io/name=kepler \
-        -o jsonpath="{.items[0].metadata.name}" \
-        -n kepler
-)
-echo "Kepler pod: $KPLR_POD"
-kubectl wait --for=condition=Ready pod $KPLR_POD --timeout=300s -n kepler
+#echo "Waiting for Kepler pod to be ready..."
+#KPLR_POD=$(
+#    kubectl get pod \
+#        -l app.kubernetes.io/name=kepler \
+#        -o jsonpath="{.items[0].metadata.name}" \
+#        -n kepler
+#)
+#echo "Kepler pod: $KPLR_POD"
+#kubectl wait --for=condition=Ready pod $KPLR_POD --timeout=300s -n kepler
 
 #kubectl apply -f kepler-config.yaml
 

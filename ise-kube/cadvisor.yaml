@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: cadvisor
-  namespace: kube-system
+  namespace: st-felixgraf-kepler
   labels:
     k8s-app: cadvisor-monitoring
 spec:

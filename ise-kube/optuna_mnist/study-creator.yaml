@@ -18,14 +18,14 @@ spec:
           - -x
           - |
             until pg_isready -U $(POSTGRES_USER) -h postgres -p 5432;
-            do echo "waiting for postgres"; sleep 2; done;
+            do echo "waiting for postgres"; sleep 5; done;
           envFrom:
             - secretRef:
                 name: postgres-secrets
       containers:
         - name: study-creator
-          image: docker.io/gafex/optuna-kubernetes-mlflow3:ise-kube
-          imagePullPolicy: IfNotPresent
+          image: docker.io/gafex/optuna-mnist:ise-kube
+          imagePullPolicy: Always
           command:
           - /bin/sh
           - -c

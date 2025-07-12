@@ -7,13 +7,13 @@ from dotenv import dotenv_values, load_dotenv
 
 from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, HelperFunctions
 
-helper = HelperFunctions(namespace="st-felixgraf")
+helper = HelperFunctions(namespace="st-felixgraf2")
 
 class OptunaBenchmark(Benchmark, MetricCollector):
 
     def __init__(self):
         MetricCollector.__init__(self)  # Initialize the KeplerMetrics class
-        self.namespace = "st-felixgraf"
+        self.namespace = "st-felixgraf2"
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def setup(self):
@@ -28,13 +28,13 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         helper.wait_for_pods_ready(label_selector="app=postgres", number_jobs=1, target_phase="Running")
         print("PostgreSQL deployment complete!")
 
-        print(f"Waiting 15 additional seconds for services to initialize...")
-        time.sleep(15)
+        print(f"Waiting30 additional seconds for services to initialize...")
+        time.sleep(30)
         print("Extra waiting period complete.")
 
 
         manifest_path = os.path.join(os.path.dirname(__file__), "study-creator.yaml")
-        utils.create_from_yaml(k8s_client, manifest_path)
+        utils.create_from_yaml(k8s_client, manifest_path, namespace=self.namespace)
 
         print("Waiting for study-creator job to complete...")
         helper.wait_for_pods_ready(label_selector="job-name=study-creator", number_jobs=1,  target_phase="Succeeded")
@@ -90,8 +90,6 @@ def main():
     helper.create_configmap_from_env(env_file_path, configmap_name="training-config")
     
     # Set up port forwarding to Prometheus
-    REQUIRED_ENV_VARS = ["BATCHSIZE", "EPOCHS", "PERCENT_VALID_EXAMPLES", "CLASSES"]
-    
     prometheus_process = subprocess.Popen(
         ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "st-felixgraf-monitoring"],
         stdout=subprocess.PIPE,

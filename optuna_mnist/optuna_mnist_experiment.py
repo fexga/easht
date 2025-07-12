@@ -56,7 +56,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):
-        self._set_f1_score()
+        self.get_optimized_score_optuna()
         """Delete all resources in the namespace and wait until they are gone."""
         config.load_kube_config()
         apps_v1 = client.AppsV1Api()
@@ -90,7 +90,7 @@ def main():
     helper.create_configmap_from_env(env_file_path, configmap_name="training-config")
     
     # Set up port forwarding to Prometheus
-    REQUIRED_ENV_VARS = ["BATCHSIZE", "EPOCHS", "PERCENT_VALID_EXAMPLES", "CLASSES"]
+    REQUIRED_ENV_VARS = ["BATCHSIZE", "EPOCHS"]
     
     prometheus_process = subprocess.Popen(
         ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],

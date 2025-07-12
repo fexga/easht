@@ -9,7 +9,7 @@ from ray.job_submission import JobSubmissionClient
 
 from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, HelperFunctions
 
-helper = HelperFunctions()
+helper = HelperFunctions(namespace="st-felixgraf2")
 
 class OptunaBenchmark(Benchmark, MetricCollector):
 
@@ -49,7 +49,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         raycluster_path = os.path.join(os.path.dirname(__file__), 'raycluster.yaml')
         print(f"Applying Ray cluster configuration from {raycluster_path}...")
         result = subprocess.run(
-            ["kubectl", "apply", "-f", raycluster_path],
+            ["kubectl", "apply", "-f", raycluster_path, "-n", "st-felixgraf2"],
             check=False,
             capture_output=True,
             text=True
@@ -63,7 +63,7 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         # Start port forwarding
         print("Setting up port forwarding...")
         self.ray_port_forward = subprocess.Popen(
-            ["kubectl", "port-forward", "svc/raycluster-head-svc", "8265:8265"],
+            ["kubectl", "port-forward", "svc/raycluster-head-svc", "8265:8265", "-n", "st-felixgraf2"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
@@ -148,11 +148,11 @@ def main():
     helper.generate_worker_yaml_from_env(env_file_path, worker_template_path, worker_yaml_path)
     
     # Set up port forwarding to Prometheus
-    prometheus_process = subprocess.Popen(
-        ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
+    #prometheus_process = subprocess.Popen(
+    #    ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],
+    #    stdout=subprocess.PIPE,
+    #    stderr=subprocess.PIPE
+    #)
     
     # Give port forwarding time to establish
     time.sleep(5)

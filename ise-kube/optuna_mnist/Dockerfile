@@ -12,3 +12,4 @@ RUN pip install --no-cache-dir optuna psycopg2-binary mlflow \
     && pip install prometheus-flask-exporter
 
 COPY pytorch_lightning_distributed.py .
+COPY check_study.sh .
