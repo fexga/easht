@@ -53,7 +53,7 @@ class OptunaBenchmark(Experiment, MetricCollector):
 
         print("Waiting for Ray Cluster to be ready...")
         helper.wait_for_pods_ready(label_selector="ray.io/node-type=head", number_jobs=1,  target_phase="Running")
-        helper.wait_for_pods_ready(label_selector="ray.io/node-type=worker", number_jobs=2,  target_phase="Running")
+        helper.wait_for_pods_ready(label_selector="ray.io/node-type=worker", number_jobs=5,  target_phase="Running")
         print("Ray Cluster deployment complete!")
 
         # Start port forwarding
