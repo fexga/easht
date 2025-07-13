@@ -10,7 +10,7 @@ spec:
       restartPolicy: OnFailure
       initContainers:
         - name: wait-for-study
-          image: optuna-kubernetes-mlflow3:example
+          image: docker.io/gafex/optuna-mnist:kind
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
@@ -19,7 +19,7 @@ spec:
                 name: training-config
       containers:
         - name: worker
-          image: optuna-kubernetes-mlflow3:example
+          image: docker.io/gafex/optuna-mnist:kind
           imagePullPolicy: IfNotPresent
           command:
             - python

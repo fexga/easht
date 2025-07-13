@@ -28,7 +28,7 @@ class OptunaBenchmark(Experiment, MetricCollector):
         helper.wait_for_pods_ready(label_selector="app=postgres", number_jobs=1, target_phase="Running")
         print("PostgreSQL deployment complete!")
 
-        print(f"Waiting30 additional seconds for services to initialize...")
+        print(f"Waiting 30 additional seconds for services to initialize...")
         time.sleep(30)
         print("Extra waiting period complete.")
 
@@ -111,7 +111,7 @@ def main():
 
         ob = OptunaBenchmark()
 
-        runner = ExperimentRunner(benchmark_cls=ob)
+        runner = ExperimentRunner(experiment_cls=ob)
         helper.validate_env_vars()
 
         runner.run()

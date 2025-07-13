@@ -114,7 +114,7 @@ def main():
 
         ob = OptunaBenchmark()
 
-        runner = ExperimentRunner(benchmark_cls=ob)
+        runner = ExperimentRunner(experiment_cls=ob)
         helper.validate_env_vars()
 
         runner.run()

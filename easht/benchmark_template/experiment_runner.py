@@ -199,7 +199,7 @@ class HelperFunctions():
 
                     # If all expected pods are complete, we're done
                     if len(completed_pods) >= expected_completions:
-                        print("All worker pods have completed successfully!")
+                        print("All pods have completed successfully!")
                         w.stop()
                         break
                 
@@ -210,9 +210,6 @@ class HelperFunctions():
             # Make sure we stop the watch
             w.stop()
 
-        # Final status report
-        elapsed = time.time() - start_time
-        print(f"Training job monitoring completed after {elapsed:.1f} seconds")
         print(f"Completed pods: {len(completed_pods)}/{expected_completions}")
 
     def delete_all_resources_in_namespace(self):
