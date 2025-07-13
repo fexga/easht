@@ -24,7 +24,7 @@ spec:
                 name: postgres-secrets
       containers:
         - name: study-creator
-          image: optuna-kubernetes-mlflow3:example
+          image: docker.io/gafex/optuna-mnist:kind
           imagePullPolicy: IfNotPresent
           command:
           - /bin/sh

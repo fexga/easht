@@ -1,15 +1,15 @@
 import os
 from kubernetes import client, config, utils
 import subprocess
-from basht2.metric_collector.metric_collector import MetricCollector
+from easht.metric_collector.metric_collector import MetricCollector
 import time
 from dotenv import dotenv_values, load_dotenv
 
-from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, HelperFunctions
+from easht.benchmark_template.experiment_runner import ExperimentRunner, Experiment, HelperFunctions
 
 helper = HelperFunctions()
 
-class OptunaBenchmark(Benchmark, MetricCollector):
+class OptunaBenchmark(Experiment, MetricCollector):
 
     def __init__(self):
         MetricCollector.__init__(self)  # Initialize the KeplerMetrics class
@@ -104,12 +104,17 @@ def main():
     
     try:
         optuna_path = os.path.dirname(__file__)
-        helper.build_docker_image("optuna-kubernetes-mlflow3:example", dockerfile_path=optuna_path)
-        helper.load_docker_image_into_kind("optuna-kubernetes-mlflow3:example")
+
+        helper.build_and_push_image(
+            image_name="optuna-mnist:kind",
+            dockerfile_dir=optuna_path,
+            registry_url="docker.io",
+            username="gafex"
+        )
 
         ob = OptunaBenchmark()
 
-        runner = BenchmarkRunner(benchmark_cls=ob)
+        runner = ExperimentRunner(benchmark_cls=ob)
         helper.validate_env_vars()
 
         runner.run()
