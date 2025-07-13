@@ -28,9 +28,9 @@ spec:
   # Worker nodes specification
   workerGroupSpecs:
   - groupName: small-workers
-    replicas: 2  # Number of worker pods
-    minReplicas: 2
-    maxReplicas: 2  # For autoscaling
+    replicas: 5  # Number of worker pods
+    minReplicas: 5
+    maxReplicas: 5  # For autoscaling
     rayStartParams: {}
     template:
       spec:
@@ -40,7 +40,7 @@ spec:
           resources:
             limits:
               cpu: "1"
-              memory: "2Gi"
+              memory: "1Gi"
             requests:
               cpu: "1"
-              memory: "2Gi"
+              memory: "1Gi"

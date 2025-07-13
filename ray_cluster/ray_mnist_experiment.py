@@ -33,10 +33,6 @@ class OptunaBenchmark(Experiment, MetricCollector):
             text=True
         )
 
-        # Print both stdout and stderr for debugging
-        print(f"STDOUT: {result.stdout}")
-        print(f"STDERR: {result.stderr}")
-
         # Wait for Operator pod to be running
         print("Waiting for Operator pod to be ready...")
         helper.wait_for_pods_ready(label_selector="app.kubernetes.io/component=kuberay-operator", number_jobs=1,  target_phase="Running")
@@ -120,7 +116,7 @@ class OptunaBenchmark(Experiment, MetricCollector):
                 break
             
             # Wait before checking again
-            time.sleep(10)  # Check every 30 seconds
+            time.sleep(60)  # Check every 30 seconds
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):

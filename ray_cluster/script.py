@@ -13,10 +13,9 @@ from ray.tune.integration.pytorch_lightning import TuneReportCallback
 from ray.tune.schedulers import MedianStoppingRule
 
 # Get settings from environment variables or use defaults
-#BATCHSIZE = int(os.environ.get("BATCHSIZE", "128"))
-#EPOCHS = int(os.environ.get("EPOCHS", "1"))
-#NUM_SAMPLES = int(os.environ.get("NUM_SAMPLES", "10"))
-#PARALLELISM = int(os.environ.get("PARALLELISM", "4"))
+BATCHSIZE = int(os.environ.get("BATCHSIZE"))
+EPOCHS = int(os.environ.get("EPOCHS"))
+
 
 
 ray.init(address="auto", ignore_reinit_error=True)
@@ -71,12 +70,12 @@ class LightningMNISTModel(pl.LightningModule):
     def train_dataloader(self):
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
         train_dataset = FashionMNIST(root="/tmp/data", train=True, transform=transform, download=True)
-        return dt.DataLoader(dataset=train_dataset, batch_size=128, shuffle=True)
+        return dt.DataLoader(dataset=train_dataset, batch_size=BATCHSIZE, shuffle=True)
     
     def val_dataloader(self):
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
         val_dataset = FashionMNIST(root="/tmp/data", train=False, transform=transform, download=True)
-        return dt.DataLoader(dataset=val_dataset, batch_size=128)
+        return dt.DataLoader(dataset=val_dataset, batch_size=BATCHSIZE)
 
 
 # Training function for Ray Tune
@@ -87,7 +86,7 @@ def train_mnist_lightning(config):
     # Ray Tune's callback properly handles metrics that don't exist yet
     callback = TuneReportCallback(metrics, on="validation_end")
     trainer = pl.Trainer(
-        max_epochs=1,
+        max_epochs=EPOCHS,
         enable_checkpointing=False,
         logger=False,
         enable_progress_bar=False,
