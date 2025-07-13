@@ -42,8 +42,8 @@ class OptunaBenchmark(Benchmark, MetricCollector):
         helper.wait_for_pods_ready(label_selector="app.kubernetes.io/component=kuberay-operator", number_jobs=1,  target_phase="Running")
         print("Operator deployment complete!")
 
-        print(f"Waiting 5 additional seconds for services to initialize...")
-        time.sleep(5)
+        print(f"Waiting 15 additional seconds for services to initialize...")
+        time.sleep(15)
         print("Extra waiting period complete.")
 
         raycluster_path = os.path.join(os.path.dirname(__file__), 'raycluster.yaml')
@@ -126,7 +126,6 @@ class OptunaBenchmark(Benchmark, MetricCollector):
     def deprovision(self):
         self.get_optimized_score_raytune("raycluster-head")
         """Delete all resources in the namespace and wait until they are gone."""
-        time.sleep(10)
 
         ## Clean up port forwarding
         if self.ray_port_forward:
@@ -134,8 +133,6 @@ class OptunaBenchmark(Benchmark, MetricCollector):
             print("Ray dashboard port forwarding stopped")
     
         helper.delete_all_resources_in_namespace()
-        print(f"Waiting 5 additional seconds for services to undeploy...")
-        time.sleep(5)
     
 def main():
 
