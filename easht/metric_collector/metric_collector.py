@@ -12,7 +12,7 @@ import os
 
 
 class MetricCollector:
-    def __init__(self, prometheus_url="http://localhost:9090/api/v1/query", electricitymap_zone="AE", electricitymap_token="dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph",     
+    def __init__(self, prometheus_url="http://localhost:9090/api/v1/query", electricitymap_zone="DE", electricitymap_token="dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph",     
         experiment_vars = [
         "EPOCHS",
         "PARALLELISM",
@@ -841,12 +841,12 @@ class MetricCollector:
         except Exception as e:
             print(f"Error copying snapshot: {e}")
 
-    def get_optimized_score_optuna(self):
+    def get_optimized_score_optuna(self, study_name):
         node_ip = self._get_node_ip()
 
         # Retrieve the best trial from the Optuna database
         study = optuna.create_study(
-            study_name="k8s_mlflow",
+            study_name=study_name,
             storage=f"postgresql://optuna:superSecretPassword@{node_ip}:30032/optunaDatabase",
             load_if_exists=True
         )
@@ -858,7 +858,7 @@ class MetricCollector:
         best_score = best_trial.value 
 
 
-        self.b_f1_Score = best_score
+        self.best_trial = best_score
     
     def get_optimized_score_raytune(self, ray_head_pod):
         # Retrieve the best trial from the Ray Tune analysis

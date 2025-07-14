@@ -129,6 +129,10 @@ class OptunaBenchmark(Experiment, MetricCollector):
             print("Ray dashboard port forwarding stopped")
     
         helper.delete_all_resources_in_namespace()
+
+        print(f"Waiting 15 additional seconds for services to undeploy...")
+        time.sleep(15)
+        print("Extra waiting period complete.")
     
 def main():
 

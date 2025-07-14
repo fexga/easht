@@ -115,7 +115,7 @@ def objective(trial):
 
 
 if __name__ == "__main__":
-    pruner = optuna.pruners.MedianPruner()
+    pruner = optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=10)
     sampler = optuna.samplers.RandomSampler()
     study = optuna.load_study(
         study_name="k8s_mlflow",

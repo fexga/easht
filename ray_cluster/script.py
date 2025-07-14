@@ -12,11 +12,6 @@ import pytorch_lightning as pl
 from ray.tune.integration.pytorch_lightning import TuneReportCallback
 from ray.tune.schedulers import MedianStoppingRule
 
-# Get settings from environment variables or use defaults
-BATCHSIZE = int(os.environ.get("BATCHSIZE"))
-EPOCHS = int(os.environ.get("EPOCHS"))
-
-
 
 ray.init(address="auto", ignore_reinit_error=True)
 
@@ -70,12 +65,12 @@ class LightningMNISTModel(pl.LightningModule):
     def train_dataloader(self):
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
         train_dataset = FashionMNIST(root="/tmp/data", train=True, transform=transform, download=True)
-        return dt.DataLoader(dataset=train_dataset, batch_size=BATCHSIZE, shuffle=True)
+        return dt.DataLoader(dataset=train_dataset, batch_size=128, shuffle=True)
     
     def val_dataloader(self):
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
         val_dataset = FashionMNIST(root="/tmp/data", train=False, transform=transform, download=True)
-        return dt.DataLoader(dataset=val_dataset, batch_size=BATCHSIZE)
+        return dt.DataLoader(dataset=val_dataset, batch_size=128)
 
 
 # Training function for Ray Tune
@@ -86,7 +81,7 @@ def train_mnist_lightning(config):
     # Ray Tune's callback properly handles metrics that don't exist yet
     callback = TuneReportCallback(metrics, on="validation_end")
     trainer = pl.Trainer(
-        max_epochs=EPOCHS,
+        max_epochs=10,
         enable_checkpointing=False,
         logger=False,
         enable_progress_bar=False,
@@ -109,8 +104,8 @@ search_space = {
 scheduler = MedianStoppingRule(
     metric="val_loss",
     mode="min",
-    grace_period=1,
-    min_samples_required=3
+    grace_period=10,
+    min_samples_required=10
 )
 
 analysis = tune.run(
@@ -118,7 +113,7 @@ analysis = tune.run(
     resources_per_trial={"cpu": 1},
     config=search_space,
     num_samples=10,
-    max_concurrent_trials=3,
+    max_concurrent_trials=5,
     scheduler=scheduler,
     storage_path="/tmp/ray_results"
 )
