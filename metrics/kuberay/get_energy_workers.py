@@ -5,16 +5,16 @@ import json
 
 url = "http://localhost:9090/api/v1/query_range"
 params = {
-    "query": '(rate(kepler_container_joules_total{container_namespace="default"}[5m]))',
-    "start": "2025-07-13T16:00:00Z",
-    "end": "2025-07-13T18:00:00Z",
+    "query": '(increase(kepler_container_joules_total{container_namespace="default"}[5m]))',
+    "start": "2025-07-13T14:00:00Z",
+    "end": "2025-07-13T15:00:00Z",
     "step": "3s"
 }
 response = requests.get(url, params=params)
 data = response.json()
 
 # Save the Prometheus response JSON
-with open("energy_power_data_optuna_workers.json", "w") as f:
+with open("energy_power_data_ray_workers.json", "w") as f:
     json.dump(data, f, indent=2)
 print("Prometheus data saved as energy_power_data.json")
 
@@ -23,7 +23,7 @@ if not result_list:
     print("No data returned for the given query and time range.")
     exit(1)
 
-fig, ax1 = plt.subplots(figsize=(10, 6))
+fig, ax1 = plt.subplots(figsize=(12, 6))
 
 # Find the global start and end time (in seconds)
 all_times = [float(t[0]) for series in result_list if series["values"] for t in series["values"]]
@@ -57,5 +57,5 @@ if labels:
     ax1.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0, frameon=False)  # Legend outside plot, vertically centered
 
 fig.tight_layout()
-plt.savefig("energy_power_plot_optuna_workers.png", bbox_inches='tight')
-print("Plot saved as energy_power_plot_optuna.png")
+plt.savefig("energy_power_plot_ray_workers.png", bbox_inches='tight')
+print("Plot saved as energy_power_plot_ray.png")

@@ -190,7 +190,7 @@ analysis = tune.run(
     resources_per_trial={"cpu": 1},
     config=search_space,
     num_samples=10,
-    max_concurrent_trials=3,
+    max_concurrent_trials=5,
     scheduler=scheduler,
     storage_path="/tmp/ray_results"
 )
