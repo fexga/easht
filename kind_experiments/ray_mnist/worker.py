@@ -75,7 +75,6 @@ def train_mnist_lightning(config):
     
     callback = TuneReportCallback(metrics, on="validation_end")
     trainer = pl.Trainer(
-        min_epochs=10,
         max_epochs=10,          
         enable_checkpointing=False,
         logger=False,
