@@ -1,0 +1,101 @@
+{
+    "steps": {
+        "setup": {
+            "duration_seconds": 146.54022812843323,
+            "total_energy_kwh": 2.965740129310346e-06,
+            "total_energy_cf": 0.000937173880862069336,
+            "cpu_energy_kwh": 6.44908189655172e-08,
+            "cpu_energy_cf": 2.03790987931034352e-05,
+            "dram_energy_kwh": 0.0,
+            "dram_energy_cf": 0.0,
+            "gpu_energy_kwh": 0,
+            "gpu_energy_cf": 0,
+            "network_receive_bytes": 2516.338768067215,
+            "network_transmit_bytes": 3167.9361288201603
+        },
+        "trail": {
+            "duration_seconds": 3449.674797296524,
+            "total_energy_kwh": 0.10881471811895482,
+            "total_energy_cf": 34.38545092558972312,
+            "cpu_energy_kwh": 0.001534548136561105,
+            "cpu_energy_cf": 0.48491721115330918,
+            "dram_energy_kwh": 0.0,
+            "dram_energy_cf": 0.0,
+            "gpu_energy_kwh": 0,
+            "gpu_energy_cf": 0,
+            "network_receive_bytes": 146815826.65224007,
+            "network_transmit_bytes": 2893103.387127531
+        },
+        "deprovision": {
+            "duration_seconds": 21.187103509902954,
+            "total_energy_kwh": 2.3423750000011873e-06,
+            "total_energy_cf": 0.0007401905000003751868,
+            "cpu_energy_kwh": 5.599999999998515e-08,
+            "cpu_energy_cf": 1.76959999999953074e-05,
+            "dram_energy_kwh": 0.0,
+            "dram_energy_cf": 0.0,
+            "gpu_energy_kwh": 0,
+            "gpu_energy_cf": 0,
+            "network_receive_bytes": 0,
+            "network_transmit_bytes": 0
+        }
+    },
+    "meta": {
+        "carbon_intensity_zone": "DE",
+        "EPOCHS": "10",
+        "PARALLELISM": "5",
+        "MODEL_IMPLEMENTATION": "https://github.com/fexga/ms_project",
+        "POD_CPU": "1000",
+        "POD_MEMORY": "1000",
+        "ACCELERATOR_TYPE": "CPU",
+        "ACCELERATOR_MEMORY": "0",
+        "DATA_LOADING_METHOD": "eager",
+        "BATCHSIZE": "128",
+        "WORKER_NODE_SYNC": "async",
+        "COMP_DISTRIBUTION": "data",
+        "HPO_FRAMEWORK": "raytune",
+        "HPO_IMPLEMENTATION": "python",
+        "completion_datetime": "2025-07-13 19:27:02",
+        "hardware_info": [
+            {
+                "name": "kind-control-plane",
+                "architecture": "amd64",
+                "os_image": "Debian GNU/Linux 12 (bookworm)",
+                "kernel_version": "6.8.0-60-generic",
+                "kubelet_version": "v1.33.1",
+                "cpu_capacity": "16",
+                "memory_capacity": "32567580Ki",
+                "gpu_capacity": "0"
+            }
+        ]
+    },
+    "total": {
+        "duration_seconds": 3617.4021289348602,
+        "total_energy_kwh": 0.10882002623408414,
+        "total_energy_cf": 34.38712828997058824,
+        "cpu_energy_kwh": 0.0015346686273800705,
+        "cpu_energy_cf": 0.484955286252102278,
+        "dram_energy_kwh": 0.0,
+        "dram_energy_cf": 0.0,
+        "gpu_energy_kwh": 0,
+        "gpu_energy_cf": 0,
+        "network_transmit_bytes": 2896271.3232563515,
+        "network_receive_bytes": 146818342.99100813,
+        "best_trial": 0.8615056872367859,
+        "kwh_1000epochs": 10.881471811895482,
+        "carbon_footprint_1000epochs_g": 3438.545092558972312
+    },
+    "overall_increase_validation": {
+        "duration_seconds": 3617.402194738388,
+        "total_energy_kwh": 0.10882553012586604,
+        "total_energy_cf": 34.38886751977366864,
+        "cpu_energy_kwh": 0.0015347450674044795,
+        "cpu_energy_cf": 0.484979441299815522,
+        "dram_energy_kwh": 0.0,
+        "dram_energy_cf": 0.0,
+        "gpu_energy_kwh": 0,
+        "gpu_energy_cf": 0,
+        "network_transmit_bytes": 3297131.5037235077,
+        "network_receive_bytes": 160104615.07572827
+    }
+}

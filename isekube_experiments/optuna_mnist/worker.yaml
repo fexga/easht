@@ -1,0 +1,47 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: worker
+spec:
+  parallelism: 4
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-study
+          image: docker.io/gafex/optuna-mnist:ise-kube
+          imagePullPolicy: Always
+          command:
+          - /bin/sh
+          - -c
+          - -e
+          - -x
+          - |
+            until [ `sh check_study.sh` -eq 0 ];
+            do echo "waiting for study"; sleep 2; done;
+          envFrom:
+            - secretRef:
+                name: postgres-secrets
+            - configMapRef:
+                name: training-config
+      containers:
+        - name: worker
+          image: docker.io/gafex/optuna-mnist:ise-kube
+          imagePullPolicy: Always
+          command:
+            - python
+            - pytorch_lightning_distributed.py
+          resources:
+            requests:
+              memory: "1000Mi"
+              cpu: "1000m"
+            limits:
+              memory: "1000Mi"
+              cpu: "1000m"
+          envFrom:
+            - secretRef:
+                name: postgres-secrets
+            - configMapRef:
+                name: training-config
+---

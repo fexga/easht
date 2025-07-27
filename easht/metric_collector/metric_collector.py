@@ -902,25 +902,27 @@ class MetricCollector:
         node_ip = self._get_node_ip()
 
         # Retrieve the best trial from the Optuna database
+        # requires "postgresql://optuna:superSecretPassword@<node; change in the future
         study = optuna.create_study(
             study_name=study_name,
             storage=f"postgresql://optuna:superSecretPassword@{node_ip}:30032/optunaDatabase",
             load_if_exists=True
         )
          
-
-        time.sleep(20)
+        time.sleep(10)
         
         best_trial = study.best_trial
         best_score = best_trial.value 
 
-
         self.best_trial = best_score
     
-    def get_optimized_score_raytune(self, ray_head_pod):
+    def get_optimized_score_raytune(self):
         # Retrieve the best trial from the Ray Tune analysis
         # Assuming the Ray Tune analysis is stored in a directory named "/tmp/best_val_accuracy.txt", needs to be configured manually
         local_path = "/tmp/best_val_accuracy.txt"
+        ray_head_pod = subprocess.check_output([
+            "kubectl", "get", "pods", "-n", "default", "-l", "ray.io/node-type=head", "-o", "jsonpath={.items[0].metadata.name}"
+        ]).decode().strip()
         cp_result = subprocess.run([
             "kubectl", "cp", f"default/{ray_head_pod}:/tmp/best_val_accuracy.txt", local_path
         ], capture_output=True, text=True)

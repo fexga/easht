@@ -45,14 +45,13 @@ class ExperimentRunner():
         """
         This class runs a Experiment.
         It is responsibile for setting up everything that is needed upfront to run the experiment and manages
-        recording and saving of experiment results. It aswell records the Latency of every Step of an
-        object that inherits the Experiment ABC.
+        recording and saving of experiment results.
         """
         self.experiment = experiment_cls
 
     def run(self):
         """
-        Runs all functions of a Experiment and records its latencies. 
+        Runs all functions of a Experiment. 
         """
 
         self.experiment.setup()
@@ -127,7 +126,6 @@ class HelperFunctions():
         )
 
         # Create the ConfigMap in the specified namespace
-    
         try:
             self.core_v1.create_namespaced_config_map(self.namespace, body=configmap)
             print(f"ConfigMap '{configmap_name}' created successfully in namespace '{self.namespace}'.")
@@ -170,8 +168,6 @@ class HelperFunctions():
         """
 
         # Get the job to determine expected completions
-        #job = batch_v1.read_namespaced_job(name=label_selector, namespace=namespace_name)
-        #expected_completions = job.spec.completions or 5
         expected_completions = number_jobs
         print(f"Job expects {expected_completions} completions")
 

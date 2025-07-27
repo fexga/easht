@@ -1,0 +1,17 @@
+{
+	"ulid": "01K16QMMAN487CW1699YVS4DF5",
+	"minTime": 1753645554691,
+	"maxTime": 1753646518570,
+	"stats": {
+		"numSamples": 13453140,
+		"numSeries": 32437,
+		"numChunks": 118899
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"01K16QMMAN487CW1699YVS4DF5"
+		]
+	},
+	"version": 1
+}

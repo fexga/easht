@@ -1,0 +1,39 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: worker
+spec:
+  parallelism: 2
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-study
+          image: docker.io/gafex/optuna-mnist:kind
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: postgres-secrets
+            - configMapRef:
+                name: training-config
+      containers:
+        - name: worker
+          image: docker.io/gafex/optuna-mnist:kind
+          imagePullPolicy: Always
+          command:
+            - python
+            - worker.py
+          resources:
+            requests:
+              memory: "1000Mi"
+              cpu: "1000m"
+            limits:
+              memory: "1000Mi"
+              cpu: "1000m"
+          envFrom:
+            - secretRef:
+                name: postgres-secrets
+            - configMapRef:
+                name: training-config
+---
