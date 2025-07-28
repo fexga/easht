@@ -172,7 +172,7 @@ def main():
         ob.calculate_energy_metrics()
 
         # Save metrics with the best score
-        ob.save_metrics("kind_experiments/ray_mnist/results/ray_mnist_resource_metrics_eval.json")
+        ob.save_metrics("kind_experiments/ray_mnist/results/ray_mnist_resource_metrics_eval_1.json")
 
         ob.save_prometheus_snapshot_locally(local_dir="kind_experiments/ray_mnist/prometheus_snapshots")
     

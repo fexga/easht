@@ -120,7 +120,7 @@ best_trial = analysis.get_best_trial("val_accuracy", "max")
 best_val_acc = best_trial.last_result["val_accuracy"]
 print(f"BEST_VAL_ACCURACY: {best_val_acc}")
 
-# Optionally, also write to a small file for easy retrieval
+# Accuracy retrieval
 with open("/tmp/best_val_accuracy.txt", "w") as f:
     f.write(str(best_val_acc))
 
