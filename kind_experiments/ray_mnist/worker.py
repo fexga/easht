@@ -97,8 +97,8 @@ search_space = {
 scheduler = MedianStoppingRule(
     metric="val_loss",
     mode="min",
-    grace_period=5,
-    min_samples_required=1
+    grace_period=8,
+    min_samples_required=12
 )
 
 analysis = tune.run(

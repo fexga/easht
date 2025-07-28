@@ -122,7 +122,7 @@ def main():
         ob.calculate_energy_metrics()
 
         # Save metrics with the best score
-        ob.save_metrics("kind_experiments/optuna_mnist/results/optuna_mnist_resource_metrics_eval.json")
+        ob.save_metrics("kind_experiments/optuna_mnist/results/optuna_mnist_resource_metrics_eval_2.json")
 
         ob.save_prometheus_snapshot_locally(local_dir="kind_experiments/optuna_mnist/prometheus_snapshots")
     
