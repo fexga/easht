@@ -1,0 +1,17 @@
+{
+	"ulid": "01K18GZ40FFDNS0CPT7GTTE3ZT",
+	"minTime": 1753702877356,
+	"maxTime": 1753706631117,
+	"stats": {
+		"numSamples": 54308611,
+		"numSeries": 32097,
+		"numChunks": 465572
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"01K18GZ40FFDNS0CPT7GTTE3ZT"
+		]
+	},
+	"version": 1
+}

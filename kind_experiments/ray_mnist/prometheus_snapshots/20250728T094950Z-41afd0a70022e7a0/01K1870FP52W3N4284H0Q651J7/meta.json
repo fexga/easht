@@ -1,0 +1,17 @@
+{
+	"ulid": "01K1870FP52W3N4284H0Q651J7",
+	"minTime": 1753694215322,
+	"maxTime": 1753696190109,
+	"stats": {
+		"numSamples": 29338393,
+		"numSeries": 33172,
+		"numChunks": 267967
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"01K1870FP52W3N4284H0Q651J7"
+		]
+	},
+	"version": 1
+}

@@ -1,0 +1,17 @@
+{
+	"ulid": "01K18D07NYNQFGEF89322DKWHB",
+	"minTime": 1753699126916,
+	"maxTime": 1753702473393,
+	"stats": {
+		"numSamples": 48411822,
+		"numSeries": 32042,
+		"numChunks": 409607
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"01K18D07NYNQFGEF89322DKWHB"
+		]
+	},
+	"version": 1
+}
