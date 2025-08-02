@@ -4,7 +4,9 @@ copy snapshot
 
 
 copy directly into promehteus pod and restart
+kubectl exec prometheus-snapshot-5b67789c8b-8sn9d -- mkdir -p /prometheus/20250728T113433Z-7e93cc333101a050
 
+kubectl cp /home/felix/Documents/Studium/Masterarbeit/ms_project/kind_experiments/optuna_mnist/prometheus_snapshots/20250728T113433Z-7e93cc333101a050 prometheus-snapshot-5b67789c8b-8sn9d:/prometheus/snapshots/20250728T113433Z-7e93cc333101a050
 
 
 

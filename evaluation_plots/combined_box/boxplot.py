@@ -3,13 +3,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load first dataset
-with open("energy_power_data_ray.json") as f:
+with open("energy_boxplot_raw_ray.json") as f:
     data_ray = json.load(f)
 result_ray = data_ray["data"]["result"][0]["values"]
 watts_ray = [float(v[1]) for v in result_ray if float(v[1]) > 0]
 
 # Load second dataset
-with open("energy_power_data_optuna.json") as f:
+with open("energy_boxplot_raw_optuna.json") as f:
     data_optuna = json.load(f)
 result_optuna = data_optuna["data"]["result"][0]["values"]
 watts_optuna = [float(v[1]) for v in result_optuna if float(v[1]) > 0]
