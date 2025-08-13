@@ -3,25 +3,20 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: study-creator
+  namespace: st-felixgraf2
 spec:
   template:
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - ise-knode1
       restartPolicy: OnFailure
-      initContainers:
-        - name: wait-for-database
-          image: postgres:latest
-          imagePullPolicy: IfNotPresent
-          command:
-          - /bin/sh
-          - -c
-          - -e
-          - -x
-          - |
-            until pg_isready -U $(POSTGRES_USER) -h postgres -p 5432;
-            do echo "waiting for postgres"; sleep 5; done;
-          envFrom:
-            - secretRef:
-                name: postgres-secrets
       containers:
         - name: study-creator
           image: docker.io/gafex/optuna-mnist:ise-kube

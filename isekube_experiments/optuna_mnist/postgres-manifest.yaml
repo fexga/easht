@@ -14,11 +14,10 @@ kind: Service
 metadata:
   name: postgres
 spec:
-  type: NodePort  # Change from ClusterIP to NodePort
+  type: ClusterIP
   ports:
     - port: 5432
       targetPort: 5432
-      nodePort: 30032  # Specify a port in the range 30000-32767
   selector:
     app: postgres
 ---
@@ -38,10 +37,19 @@ spec:
       labels:
         app: postgres
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - ise-knode1
       containers:
         - name: postgres
-          image: postgres:latest
-          imagePullPolicy: IfNotPresent
+          image: postgres:15
+          imagePullPolicy: Always
           envFrom:
             - secretRef:
                 name: postgres-secrets

@@ -3,28 +3,21 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: worker
+  namespace: st-felixgraf2
 spec:
   parallelism: {{PARALLELISM}}
   template:
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - ise-knode1
       restartPolicy: OnFailure
-      initContainers:
-        - name: wait-for-study
-          image: docker.io/gafex/optuna-mnist:ise-kube
-          imagePullPolicy: Always
-          command:
-          - /bin/sh
-          - -c
-          - -e
-          - -x
-          - |
-            until [ `sh check_study.sh` -eq 0 ];
-            do echo "waiting for study"; sleep 5; done;
-          envFrom:
-            - secretRef:
-                name: postgres-secrets
-            - configMapRef:
-                name: training-config
       containers:
         - name: worker
           image: docker.io/gafex/optuna-mnist:ise-kube

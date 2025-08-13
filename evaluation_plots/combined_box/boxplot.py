@@ -6,13 +6,13 @@ import numpy as np
 with open("energy_boxplot_raw_ray.json") as f:
     data_ray = json.load(f)
 result_ray = data_ray["data"]["result"][0]["values"]
-watts_ray = [float(v[1]) for v in result_ray if float(v[1]) > 0]
+watts_ray = [float(v[1]) for v in result_ray]
 
 # Load second dataset
 with open("energy_boxplot_raw_optuna.json") as f:
     data_optuna = json.load(f)
 result_optuna = data_optuna["data"]["result"][0]["values"]
-watts_optuna = [float(v[1]) for v in result_optuna if float(v[1]) > 0]
+watts_optuna = [float(v[1]) for v in result_optuna]
 
 # Combine for boxplot
 data = [watts_ray, watts_optuna]
@@ -22,7 +22,7 @@ plt.figure(figsize=(6, 4))
 box = plt.boxplot(
     data,
     labels=labels,
-    showfliers=False,
+    showfliers=False,  # Hide outliers
     medianprops=dict(color='r', linewidth=2),
     widths=0.55
 )

@@ -121,7 +121,7 @@ def main():
         # Save metrics with the best score
         ob.save_metrics("optuna_mnist_resource_metrics.json")
 
-        ob.save_prometheus_snapshot_locally(local_dir="prometheus_snapshots")
+        #ob.save_prometheus_snapshot_locally(local_dir="prometheus_snapshots")
     
 
     finally:

@@ -2,16 +2,16 @@ import os
 from kubernetes import client, config, utils, watch
 import subprocess
 import socket
-from basht2.metric_collector.metric_collector import MetricCollector
+from easht.metric_collector.metric_collector import MetricCollector
 import time
 from dotenv import load_dotenv
 from ray.job_submission import JobSubmissionClient
 
-from basht2.benchmark_template.experiment_runner import BenchmarkRunner, Benchmark, HelperFunctions
+from easht.benchmark_template.experiment_runner import ExperimentRunner, Experiment, HelperFunctions
 
 helper = HelperFunctions(namespace="st-felixgraf2")
 
-class OptunaBenchmark(Benchmark, MetricCollector):
+class OptunaBenchmark(Experiment, MetricCollector):
 
     def __init__(self):
         MetricCollector.__init__(self)  # Initialize the KeplerMetrics class
@@ -163,7 +163,7 @@ def main():
     try:
         ob = OptunaBenchmark()
 
-        runner = BenchmarkRunner(benchmark_cls=ob)
+        runner = ExperimentRunner(experiment_cls=ob)
         helper.validate_env_vars()
 
         runner.run()
@@ -178,10 +178,12 @@ def main():
 
     finally:
         pass
+        '''
         # Stop port forwarding to Prometheus
         if prometheus_process:
             prometheus_process.terminate()
             print("Prometheus port forwarding stopped")
+    '''
 
 
 

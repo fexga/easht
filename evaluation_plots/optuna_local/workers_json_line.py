@@ -71,7 +71,6 @@ for pod_name, time_watts in pod_time_watts.items():
     watts = [time_watts.get(ts, 0) for ts in all_times_sorted]
     ax1.plot(times, watts, label=pod_name)
 
-# Add vertical dotted line at 20 seconds (0.333 minutes)
 for i, split_x in enumerate(split_xs):
     if i == 0:
         ax1.axvline(split_x, color='gray', linestyle=':', linewidth=2, label=f'Setup Phase End')
