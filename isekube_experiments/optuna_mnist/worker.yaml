@@ -16,7 +16,7 @@ spec:
                   - key: kubernetes.io/hostname
                     operator: In
                     values:
-                      - ise-knode1
+                      - ise-knode6
       restartPolicy: OnFailure
       containers:
         - name: worker

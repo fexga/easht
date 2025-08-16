@@ -13,7 +13,7 @@
             "network_receive_bytes": 712448.3698743334,
             "network_transmit_bytes": 2128446.7530494547
         },
-        "trail": {
+        "trial": {
             "duration_seconds": 1864.0012936592102,
             "total_energy_kwh": 0.053591786791912684,
             "total_energy_cf": 10.128847703671497,

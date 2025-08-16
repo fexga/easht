@@ -16,7 +16,7 @@ watts_optuna = [float(v[1]) for v in result_optuna]
 
 # Combine for boxplot
 data = [watts_ray, watts_optuna]
-labels = ["RayTune", "Optuna"]
+labels = ["Ray Tune", "Optuna"]
 
 plt.figure(figsize=(6, 4))
 box = plt.boxplot(

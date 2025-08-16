@@ -81,7 +81,7 @@ class OptunaBenchmark(Experiment, MetricCollector):
         print("Study setup complete!")
 
     @MetricCollector.measure_power(aggregation_method='increase')
-    def trail(self):
+    def trial(self):
 
         ray_address = os.environ.get("RAY_ADDRESS", "http://127.0.0.1:8265")
         client = JobSubmissionClient(ray_address)

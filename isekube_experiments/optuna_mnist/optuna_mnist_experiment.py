@@ -41,7 +41,7 @@ class OptunaBenchmark(Experiment, MetricCollector):
         print("Study setup complete!")
 
     @MetricCollector.measure_power(aggregation_method='increase')
-    def trail(self):
+    def trial(self):
         config.load_kube_config()
         k8s_client = client.ApiClient()
 

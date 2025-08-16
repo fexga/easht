@@ -22,7 +22,7 @@ class Experiment(ABC):
         pass
 
     @abstractmethod
-    def trail(self):
+    def trial(self):
         """
             Executing the hyperparameter optimization on the deployed platfrom.
         """
@@ -55,7 +55,7 @@ class ExperimentRunner():
         """
 
         self.experiment.setup()
-        self.experiment.trail()
+        self.experiment.trial()
         self.experiment.deprovision()
 
 class HelperFunctions():

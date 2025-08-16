@@ -131,15 +131,15 @@ class MetricCollector:
     def _calculate_epoch_metrics(self):
         """
         Calculate adjusted energy consumption based on the number of epochs.
-        Formula: (number of epochs / 1000) * energy consumption of the 'trail' step.
+        Formula: (number of epochs / 1000) * energy consumption of the 'trial' step.
         """
         # Load the number of epochs from the .env file
         epochs = int(os.getenv("EPOCHS"))  # Default to 1 if not set
 
-        # Ensure the 'trail' step metrics exist
-        if "total_energy_kwh" in self.metrics["steps"]["trail"]:
-            total_kwh = self.metrics["steps"]["trail"]["total_energy_kwh"]
-            total_energy_cf = self.metrics["steps"]["trail"]["total_energy_cf"]
+        # Ensure the 'trial' step metrics exist
+        if "total_energy_kwh" in self.metrics["steps"]["trial"]:
+            total_kwh = self.metrics["steps"]["trial"]["total_energy_kwh"]
+            total_energy_cf = self.metrics["steps"]["trial"]["total_energy_cf"]
 
             # Calculate adjusted energy
             energy_per_1000epochs = (1000 / epochs) * total_kwh
@@ -156,7 +156,7 @@ class MetricCollector:
             print(f"kwh_1000epochs saved in 'meta': {energy_per_1000epochs:.2f} joules")
             print(f"carbon_footprint_1000epochs saved in 'meta': {cf_per_1000epochs:.4f} kgCO2e")
         else:
-            print("Metrics for 'trail' step or 'total_energy_kwh' not found.")
+            print("Metrics for 'trial' step or 'total_energy_kwh' not found.")
 
     def _add_env_to_meta(self):
         """
