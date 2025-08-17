@@ -250,6 +250,7 @@ class HelperFunctions():
     def validate_env_vars(self,     
         required_vars = [
         "EPOCHS",
+        "TRIALS",
         "PARALLELISM",
         "MODEL_IMPLEMENTATION",
         "POD_CPU",

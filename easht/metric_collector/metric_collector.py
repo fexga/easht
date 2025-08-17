@@ -15,6 +15,7 @@ class MetricCollector:
     def __init__(self, prometheus_url="http://localhost:9090/api/v1/query", electricitymap_zone="DE", electricitymap_token="dIwUCF85zoiOQKDWtQKTKjarwIg2Mpph",     
         experiment_vars = [
         "EPOCHS",
+        "TRIALS",
         "PARALLELISM",
         "MODEL_IMPLEMENTATION",
         "POD_CPU",
