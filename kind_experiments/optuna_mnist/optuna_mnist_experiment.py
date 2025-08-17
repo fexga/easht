@@ -89,9 +89,7 @@ def main():
     # Create the ConfigMap from the .env file
     helper.create_configmap_from_env(env_file_path, configmap_name="training-config")
     
-    # Set up port forwarding to Prometheus
-    REQUIRED_ENV_VARS = ["BATCHSIZE", "EPOCHS"]
-    
+    # Set up port forwarding to Prometheus    
     prometheus_process = subprocess.Popen(
         ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],
         stdout=subprocess.PIPE,
