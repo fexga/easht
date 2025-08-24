@@ -7,7 +7,7 @@ This repo is part of the master's thesis "Measuring the Sustainability of Hyperp
 
 Conducted HPO experiments are structured and measured in phases using the following step model:
 
-![stepmodel](docs/stepmodel.pdf).
+![stepmodel](docs/stepmodel.png).
 
 EASHT is composed of the following components: 
 - Kepler: responsible for measuring energy consumption in the Kubernetes cluster
@@ -23,9 +23,9 @@ After a successful experiment, EASHT produces two files:
 
 The following diagram illustrates the architecture of easht:
 
-![architecture](docs/architecture.pdf).
+![architecture](docs/architecture.png).
 
-## Sample Experiment
+## Sample Experiments
 This repository contains two sample HPO experiments using Optuna and Ray Tune, which can be run locally and showcase the functionalities of EASHT.
 
 ### Prerequisites
