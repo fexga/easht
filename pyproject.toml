@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easht"
+version = "0.1.0"
+description = "Evaluation Approach for Sustainable Hyperparameter Tuning"
+dependencies = [
+    "ray",
+    "pytorch-lightning",
+    "torch",
+    "torchvision",
+    "kubernetes",
+    "python-dotenv",
+    "requests",
+    "optuna"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]

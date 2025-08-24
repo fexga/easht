@@ -11,10 +11,10 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
     --set server.image.tag=v3.3.1 \
     --namespace monitoring \
     --create-namespace \
-    -f prometheus-values.yaml \
+    -f monitoring/prometheus/prometheus-values.yaml \
     --wait
 
 echo "Deploying cAdvisor..."
-kubectl apply -f cadvisor.yaml
+kubectl apply -f monitoring/prometheus/cadvisor.yaml
 
 echo "Setup complete!"

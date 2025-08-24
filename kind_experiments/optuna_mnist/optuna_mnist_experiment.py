@@ -5,7 +5,7 @@ from easht.metric_collector.metric_collector import MetricCollector
 import time
 from dotenv import dotenv_values, load_dotenv
 
-from easht.benchmark_template.experiment_runner import ExperimentRunner, Experiment, HelperFunctions
+from easht.experiment_template.experiment_runner import ExperimentRunner, Experiment, HelperFunctions
 
 helper = HelperFunctions()
 
@@ -120,7 +120,7 @@ def main():
         ob.calculate_energy_metrics()
 
         # Save metrics with the best score
-        ob.save_metrics("kind_experiments/optuna_mnist/results/optuna_mnist_resource_metrics_eval_2.json")
+        ob.save_metrics("kind_experiments/optuna_mnist/results/optuna_mnist_resource_metrics_eval.json")
 
         ob.save_prometheus_snapshot_locally(local_dir="kind_experiments/optuna_mnist/prometheus_snapshots")
     

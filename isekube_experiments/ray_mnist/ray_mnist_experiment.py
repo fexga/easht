@@ -1,15 +1,15 @@
 import os
-from kubernetes import config
+from kubernetes import client, config, utils, watch
 import subprocess
 import socket
 from easht.metric_collector.metric_collector import MetricCollector
 import time
-from dotenv import load_dotenv, dotenv_values
+from dotenv import load_dotenv
 from ray.job_submission import JobSubmissionClient
 
 from easht.experiment_template.experiment_runner import ExperimentRunner, Experiment, HelperFunctions
 
-helper = HelperFunctions()
+helper = HelperFunctions(namespace="st-felixgraf2")
 
 class OptunaBenchmark(Experiment, MetricCollector):
 
@@ -21,46 +21,49 @@ class OptunaBenchmark(Experiment, MetricCollector):
     def setup(self):
         config.load_kube_config()
 
+        kuberay_dir = os.path.join(os.path.dirname(__file__), 'kuberay-manifests/default')
+        os.makedirs(kuberay_dir, exist_ok=True)
+
         # Use KubeRay's standard deployment method for Kind
         print("Setting up KubeRay operator...")
-        subprocess.run(
+        result = subprocess.run(
             ["kubectl", "create", "-k", "github.com/ray-project/kuberay/ray-operator/config/default"],
             check=False,
             capture_output=True,
             text=True
         )
 
+        # Print both stdout and stderr for debugging
+        print(f"STDOUT: {result.stdout}")
+        print(f"STDERR: {result.stderr}")
+
         # Wait for Operator pod to be running
         print("Waiting for Operator pod to be ready...")
         helper.wait_for_pods_ready(label_selector="app.kubernetes.io/component=kuberay-operator", number_jobs=1,  target_phase="Running")
         print("Operator deployment complete!")
 
-        print(f"Waiting 15 additional seconds for services to initialize...")
-        time.sleep(15)
+        print(f"Waiting 5 additional seconds for services to initialize...")
+        time.sleep(5)
         print("Extra waiting period complete.")
 
         raycluster_path = os.path.join(os.path.dirname(__file__), 'raycluster.yaml')
         print(f"Applying Ray cluster configuration from {raycluster_path}...")
-        subprocess.run(
-            ["kubectl", "apply", "-f", raycluster_path],
+        result = subprocess.run(
+            ["kubectl", "apply", "-f", raycluster_path, "-n", "st-felixgraf2"],
             check=False,
             capture_output=True,
             text=True
         )
 
-        env_path = os.path.join(os.path.dirname(__file__), "config.env")
-        env_vars = dotenv_values(env_path)
-        number_jobs = int(env_vars.get("PARALLELISM"))
-
         print("Waiting for Ray Cluster to be ready...")
         helper.wait_for_pods_ready(label_selector="ray.io/node-type=head", number_jobs=1,  target_phase="Running")
-        helper.wait_for_pods_ready(label_selector="ray.io/node-type=worker", number_jobs=number_jobs,  target_phase="Running")
+        helper.wait_for_pods_ready(label_selector="ray.io/node-type=worker", number_jobs=2,  target_phase="Running")
         print("Ray Cluster deployment complete!")
 
         # Start port forwarding
         print("Setting up port forwarding...")
         self.ray_port_forward = subprocess.Popen(
-            ["kubectl", "port-forward", "svc/raycluster-head-svc", "8265:8265"],
+            ["kubectl", "port-forward", "svc/raycluster-head-svc", "8265:8265", "-n", "st-felixgraf2"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
@@ -89,19 +92,17 @@ class OptunaBenchmark(Experiment, MetricCollector):
 
         # Define the runtime environment
         runtime_env = {
-            "working_dir": "kind_experiments/ray_mnist",  # Directory containing the script and requirements.txt
-            "pip": "kind_experiments/ray_mnist/requirements.txt",
+            "working_dir": "ray_cluster",  # Directory containing the script and requirements.txt
+            "pip": "ray_cluster/requirements.txt",
             "excludes": [                  # Exclude large files
                 "**prometheus_snapshots/**",
-                "**.git/**",
-                "**__pycache__/**",
-                "**.kuberay-manifests/**",
+                "**.git/**"
             ]
         }
 
         # Submit the job
         job_id = client.submit_job(
-            entrypoint="python worker.py",
+            entrypoint="python script.py",
             runtime_env=runtime_env
         )
 
@@ -119,12 +120,13 @@ class OptunaBenchmark(Experiment, MetricCollector):
                 break
             
             # Wait before checking again
-            time.sleep(60)  # Check every 60 seconds
+            time.sleep(10)  # Check every 30 seconds
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):
-        self.get_optimized_score_raytune()
+        self.get_optimized_score_raytune("raycluster-head")
         """Delete all resources in the namespace and wait until they are gone."""
+        time.sleep(10)
 
         ## Clean up port forwarding
         if self.ray_port_forward:
@@ -132,15 +134,13 @@ class OptunaBenchmark(Experiment, MetricCollector):
             print("Ray dashboard port forwarding stopped")
     
         helper.delete_all_resources_in_namespace()
-
-        print(f"Waiting 15 additional seconds for services to undeploy...")
-        time.sleep(15)
-        print("Extra waiting period complete.")
+        print(f"Waiting 5 additional seconds for services to undeploy...")
+        time.sleep(5)
     
 def main():
 
     # Load environment variables from .env file
-    env_file_path = os.path.join(os.path.dirname(__file__), "config.env")
+    env_file_path = os.path.join(os.path.dirname(__file__), ".env")
     load_dotenv(env_file_path)
 
     worker_template_path = os.path.join(os.path.dirname(__file__), "raycluster.yaml.template")
@@ -148,11 +148,11 @@ def main():
     helper.generate_worker_yaml_from_env(env_file_path, worker_template_path, worker_yaml_path)
     
     # Set up port forwarding to Prometheus
-    prometheus_process = subprocess.Popen(
-        ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
+    #prometheus_process = subprocess.Popen(
+    #    ["kubectl", "port-forward", "svc/prometheus-kube-prometheus-prometheus", "9090:9090", "-n", "monitoring"],
+    #    stdout=subprocess.PIPE,
+    #    stderr=subprocess.PIPE
+    #)
     
     # Give port forwarding time to establish
     time.sleep(5)
@@ -171,17 +171,19 @@ def main():
         ob.calculate_energy_metrics()
 
         # Save metrics with the best score
-        ob.save_metrics("kind_experiments/ray_mnist/results/ray_mnist_resource_metrics_eval.json")
+        ob.save_metrics("ray_mnist_resource_metrics.json")
 
-        ob.save_prometheus_snapshot_locally(local_dir="kind_experiments/ray_mnist/prometheus_snapshots")
+        ob.save_prometheus_snapshot_locally(local_dir="prometheus_snapshots")
     
 
     finally:
         pass
+        '''
         # Stop port forwarding to Prometheus
         if prometheus_process:
             prometheus_process.terminate()
             print("Prometheus port forwarding stopped")
+    '''
 
 
 

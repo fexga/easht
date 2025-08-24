@@ -25,7 +25,7 @@ echo "Kepler pod: $KPLR_POD"
 kubectl wait --for=condition=Ready pod $KPLR_POD --timeout=300s -n kepler
 
 echo "Applying Kepler ServiceMonitor..."
-kubectl apply -f kepler_service_monitor.yaml
+kubectl apply -f monitoring/kepler/kepler_service_monitor.yaml
 
 echo "Setup complete!"
 

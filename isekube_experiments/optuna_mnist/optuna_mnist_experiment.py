@@ -5,7 +5,7 @@ from easht.metric_collector.metric_collector import MetricCollector
 import time
 from dotenv import dotenv_values, load_dotenv
 
-from easht.benchmark_template.experiment_runner import ExperimentRunner, Experiment, HelperFunctions
+from easht.experiment_template.experiment_runner import ExperimentRunner, Experiment, HelperFunctions
 
 helper = HelperFunctions(namespace="st-felixgraf2")
 
@@ -57,7 +57,7 @@ class OptunaBenchmark(Experiment, MetricCollector):
 
     @MetricCollector.measure_power(aggregation_method='increase')
     def deprovision(self):
-        self._set_f1_score()
+        self.get_optimized_score_optuna(study_name="k8s_mlflow")
         """Delete all resources in the namespace and wait until they are gone."""
         config.load_kube_config()
         apps_v1 = client.AppsV1Api()
