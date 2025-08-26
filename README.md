@@ -1,6 +1,6 @@
-# Easht - An **E**valuation **A**pproach for **S**ustainabile **H**yperparameter **T**uning##
+# Easht - An **E**valuation **A**pproach for **S**ustainable **H**yperparameter **T**uning
 
-EASHT provides a framework to measure energy consumption and CO2 emissions of distributed Hyperparameter Optimization in Kubernetes.
+EASHT provides a framework to measure energy consumption and CO2 emissions of distributed hyperparameter optimization in Kubernetes.
 This repo is part of the master's thesis "Measuring the Sustainability of Hyperparamater Optimization in the Cloud" submitted in August 2025 at Technische Universität Berlin.
 
 ## Approach and Architecture
@@ -21,12 +21,12 @@ After a successful experiment, EASHT produces two files:
 - a structured result file, containing calculated metrics for each phase of the step model and the overall process
 - a Prometheus snapshot for validating the produced metrics of EASHT
 
-The following diagram illustrates the architecture of easht:
+The following diagram illustrates the architecture of EASHT:
 
 ![architecture](docs/architecture.png)
 
 ## Sample Experiments
-This repository contains two sample HPO experiments using Optuna and Ray Tune, which can be run locally and showcase the functionalities of EASHT.
+This repository contains two sample HPO experiments using Optuna and Ray Tune, which can be run locally and showcase the functionalities of EASHT. The experiments are identical to those conducted in the thesis evaluation.
 
 ### Prerequisites
 
@@ -49,7 +49,7 @@ This repository contains two sample HPO experiments using Optuna and Ray Tune, w
 
 Before installing the monitoring components and starting the sample experiments, a kind cluster be created first.
 
-To install kind, instructions cam be followed [here](https://kind.sigs.k8s.io/docs/user/quick-start/#installation).
+To install kind, instructions can be followed [here](https://kind.sigs.k8s.io/docs/user/quick-start/#installation).
 
 ### Monitoring components
 
