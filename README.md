@@ -10,14 +10,14 @@ Conducted HPO experiments are structured and measured in phases using the follow
 ![stepmodel](docs/stepmodel.png)
 
 EASHT is composed of the following components: 
-- Kepler: responsible for measuring energy consumption in the Kubernetes cluster
+- Kepler: responsible for measuring energy consumption in a Kubernetes cluster
 - cAdvisor: records network traffic
 - Prometheus: scrapes collected metrics from Kepler and cAdvisor
 - Experiment Runner: wraps HPO experiments into the aforementioned step model
 - Metric Collector: queries metrics from Prometheus and calculates sustainability related metrics
 - Configuration file: defines a set of relevant parameters to configure distributed HPO 
 
-After a successful experiment, EASHT produces two files:
+After a successful experiment, EASHT produces 2 files:
 - a structured result file, containing calculated metrics for each phase of the step model and the overall process
 - a Prometheus snapshot for validating the produced metrics of EASHT
 
@@ -47,9 +47,9 @@ This repository contains two sample HPO experiments using Optuna and Ray Tune, w
 
 ### Install kind
 
-Before installing the monitoring components and starting the sample experiments, a kind cluster be created first.
+Before installing the monitoring components and starting the sample experiments, a Kind cluster be created first.
 
-To install kind, instructions can be followed [here](https://kind.sigs.k8s.io/docs/user/quick-start/#installation).
+To install Kind, instructions can be followed [here](https://kind.sigs.k8s.io/docs/user/quick-start/#installation).
 
 ### Monitoring components
 
