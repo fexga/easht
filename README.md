@@ -1,4 +1,4 @@
-# Easht - An **E**valuation **A**pproach for **S**ustainable **H**yperparameter **T**uning
+# EASHT - An **E**valuation **A**pproach for **S**ustainable **H**yperparameter **T**uning
 
 EASHT provides a framework to measure energy consumption and CO2 emissions of distributed hyperparameter optimization in Kubernetes.
 This repo is part of the master's thesis "Measuring the Sustainability of Hyperparamater Optimization in the Cloud" submitted in August 2025 at Technische Universität Berlin.
